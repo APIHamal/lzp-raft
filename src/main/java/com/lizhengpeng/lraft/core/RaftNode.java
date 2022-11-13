@@ -23,11 +23,11 @@ public class RaftNode implements MessageHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(RaftNode.class);
 
-    private static final int minElectionTimeout = 2000; // 最小选举超时时间
+    private static final int minElectionTimeout = 1000; // 最小选举超时时间
 
-    private static final int maxElectionTimeout = 4000; // 最大选举超时时间
+    private static final int maxElectionTimeout = 3000; // 最大选举超时时间
 
-    private static final int heartbeatInterval = 1000; // 心跳时间间隔
+    private static final int heartbeatInterval = 500; // 心跳时间间隔
 
     private RaftRole nodeRole = RaftRole.FOLLOWER; // 当前节点的角色
 
@@ -46,8 +46,6 @@ public class RaftNode implements MessageHandler {
     private RpcServer rpcServer = new RpcServer();
 
     private TaskExecutor taskExecutor = new TaskExecutor();
-
-    private ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
 
     private ScheduledFuture<?> followerSchedule;
 
@@ -90,7 +88,6 @@ public class RaftNode implements MessageHandler {
     public void startRaftServer(Endpoint endpoint) {
         currentId = endpoint.getNodeId().getText();
         rpcServer.setMessageHandler(this);
-        rpcServer.setTaskExecutor(taskExecutor);
         rpcServer.setRaftGroupTable(raftGroupTable);
         rpcServer.startRpcServer(endpoint); // 启动rpc的服务
         // 启动时都是follower状态
@@ -102,27 +99,25 @@ public class RaftNode implements MessageHandler {
      * @return
      */
     public void registerFollowerTimeoutTask() {
-        followerSchedule = scheduledExecutorService.schedule(() -> {
-            // 注意这里将异步的调用转为了同步的调用
-            taskExecutor.submit(() -> {
-                voteCount = 0; // 重新设置当前获取的票数
-                nodeRole = RaftRole.CANDIDATE; // 切换角色为候选者
-                currentTerm.addAndGet(1); // term首先增加1
+        // 注意这里将异步的调用转为了同步的调用
+        followerSchedule = taskExecutor.submit(() -> {
+            voteCount = 0; // 重新设置当前获取的票数
+            nodeRole = RaftRole.CANDIDATE; // 切换角色为候选者
+            currentTerm.addAndGet(1); // term首先增加1
 
-                // 发送投票的请求到各个节点中
-                RequestVoteMsg message = new RequestVoteMsg();
-                message.setNodeId(currentId);
-                message.setTerm(currentTerm.get());
-                message.setLastLogIndex(0L);
-                message.setLastLogIndex(0L); // 最后一条日志的任期和索引
-                rpcServer.broadcastMsg(message); // 广播请求投票的消息
-                logger.info("node send vote => {},{},{},{}", nodeRole.name(), currentId, currentTerm.get(), message);
+            // 发送投票的请求到各个节点中
+            RequestVoteMsg message = new RequestVoteMsg();
+            message.setNodeId(currentId);
+            message.setTerm(currentTerm.get());
+            message.setLastLogIndex(0L);
+            message.setLastLogIndex(0L); // 最后一条日志的任期和索引
+            rpcServer.broadcastMsg(message); // 广播请求投票的消息
+            logger.info("node send vote => {},{},{},{}", nodeRole.name(), currentId, currentTerm.get(), message);
 
-                // 变为candidate后需要设置候选者定时器
-                // 如果发生了平票或者网络分区则需要继续进行选举操作
-                registerCandidateTimeoutTask();
-            });
-        }, randomTimeOut(), TimeUnit.MILLISECONDS);
+            // 变为candidate后需要设置候选者定时器
+            // 如果发生了平票或者网络分区则需要继续进行选举操作
+            registerCandidateTimeoutTask();
+            }, randomTimeOut());
     }
 
     /**
@@ -130,26 +125,24 @@ public class RaftNode implements MessageHandler {
      * @return
      */
     public void registerCandidateTimeoutTask() {
-        candidateSchedule = scheduledExecutorService.schedule(() -> {
-            // 注意这里将异步的调用转为了同步的调用
-            taskExecutor.submit(() -> {
-                voteCount = 0; // 重新设置当前获取的票数
-                currentTerm.addAndGet(1); // term首先增加1
+        // 注意这里将异步的调用转为了同步的调用
+        candidateSchedule = taskExecutor.submit(() -> {
+            voteCount = 0; // 重新设置当前获取的票数
+            currentTerm.addAndGet(1); // term首先增加1
 
-                // 发送投票的请求到各个节点中
-                RequestVoteMsg message = new RequestVoteMsg();
-                message.setNodeId(currentId);
-                message.setTerm(currentTerm.get());
-                message.setLastLogIndex(0L);
-                message.setLastLogIndex(0L); // 最后一条日志的任期和索引
-                logger.info("node send vote => {},{},{},{}", nodeRole.name(), currentId, currentTerm.get(), message);
+            // 发送投票的请求到各个节点中
+            RequestVoteMsg message = new RequestVoteMsg();
+            message.setNodeId(currentId);
+            message.setTerm(currentTerm.get());
+            message.setLastLogIndex(0L);
+            message.setLastLogIndex(0L); // 最后一条日志的任期和索引
+            logger.info("node send vote => {},{},{},{}", nodeRole.name(), currentId, currentTerm.get(), message);
 
-                rpcServer.broadcastMsg(message); // 广播请求投票的消息
+            rpcServer.broadcastMsg(message); // 广播请求投票的消息
 
-                // candidate超时后需要重新开始随机超时发起选举
-                registerCandidateTimeoutTask();
-            });
-        }, randomTimeOut(), TimeUnit.MILLISECONDS);
+            // candidate超时后需要重新开始随机超时发起选举
+            registerCandidateTimeoutTask();
+        }, randomTimeOut());
     }
 
     /**
@@ -157,22 +150,20 @@ public class RaftNode implements MessageHandler {
      * @return
      */
     public void registerLeaderTask() {
-        leaderSchedule = scheduledExecutorService.schedule(() -> {
-            // 注意这里将异步的调用转为了同步的调用
-            taskExecutor.submit(() -> {
-                // 心跳消息
-                AppendLogMsg appendLogMsg = new AppendLogMsg();
-                appendLogMsg.setLeaderId(currentId);
-                appendLogMsg.setTerm(currentTerm.get());
-                appendLogMsg.setPreLogIndex(0l);
-                appendLogMsg.setPreLogTerm(0l); // 实际上应该是发送日志的消息
-                rpcServer.broadcastMsg(appendLogMsg);
-                logger.info("node append log => {},{},{},{}", nodeRole.name(), currentId, currentTerm.get(), appendLogMsg);
+        // 注意这里将异步的调用转为了同步的调用
+        leaderSchedule = taskExecutor.submit(() -> {
+            // 心跳消息
+            AppendLogMsg appendLogMsg = new AppendLogMsg();
+            appendLogMsg.setLeaderId(currentId);
+            appendLogMsg.setTerm(currentTerm.get());
+            appendLogMsg.setPreLogIndex(0l);
+            appendLogMsg.setPreLogTerm(0l); // 实际上应该是发送日志的消息
+            rpcServer.broadcastMsg(appendLogMsg);
+            logger.info("node append log => {},{},{},{}", nodeRole.name(), currentId, currentTerm.get(), appendLogMsg);
 
-                // 重复的发送数据
-                registerLeaderTask();
-            });
-        }, heartbeatInterval, TimeUnit.MILLISECONDS);
+            // 重复的发送数据
+            registerLeaderTask();
+        }, heartbeatInterval);
     }
 
     /**

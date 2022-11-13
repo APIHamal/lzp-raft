@@ -1,5 +1,6 @@
 package com.lizhengpeng.lraft.core;
 
+import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSONObject;
 import com.lizhengpeng.lraft.exception.RaftCodecException;
 import com.lizhengpeng.lraft.exception.RaftException;
@@ -8,6 +9,8 @@ import com.lizhengpeng.lraft.request.RequestVoteMsg;
 import com.lizhengpeng.lraft.response.AppendLogRes;
 import com.lizhengpeng.lraft.response.RequestVoteRes;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -16,6 +19,8 @@ import java.nio.charset.StandardCharsets;
  * @author lzp
  */
 public class RaftCodec {
+
+    public static final Integer HEAD_LENGTH = 6;
 
     private static final byte REQUEST_VOTE_REQ = 1;
 
@@ -32,20 +37,25 @@ public class RaftCodec {
      */
     public static byte[] encode(Object message) {
         try {
-            byte[] jsonBytes = JSONObject.toJSONString(message).getBytes(StandardCharsets.UTF_8);
-            byte[] encode = new byte[jsonBytes.length + 1];
+            byte[] jsonBytes = JSONObject.toJSONString(message).getBytes(StandardCharsets.UTF_8); // 消息内容编码
+            byte[] encode = new byte[HEAD_LENGTH + 1 + jsonBytes.length]; // 整个报文的总长度
+            // 头部4个字节字符串表示整个报文内容的长度
+            String head = String.valueOf(1 + jsonBytes.length);
+            byte[] headBytes = StrUtil.fillBefore(head, '0', HEAD_LENGTH).getBytes(StandardCharsets.UTF_8); // 用0填充head
+            System.arraycopy(headBytes, 0, encode, 0, HEAD_LENGTH);
+
             if (message instanceof RequestVoteMsg) {
-                encode[0] = REQUEST_VOTE_REQ;
+                encode[HEAD_LENGTH] = REQUEST_VOTE_REQ;
             } else if (message instanceof RequestVoteRes) {
-                encode[0] = REQUEST_VOTE_RES;
+                encode[HEAD_LENGTH] = REQUEST_VOTE_RES;
             } else if (message instanceof AppendLogMsg) {
-                encode[0] = APPEND_LOG_REQ;
+                encode[HEAD_LENGTH] = APPEND_LOG_REQ;
             } else if (message instanceof AppendLogRes) {
-                encode[0] = APPEND_LOG_RES;
+                encode[HEAD_LENGTH] = APPEND_LOG_RES;
             } else {
                 throw new RaftException("encode error un support message type");
             }
-            System.arraycopy(jsonBytes, 0, encode, 1, jsonBytes.length);
+            System.arraycopy(jsonBytes, 0, encode, HEAD_LENGTH + 1, jsonBytes.length);
             return encode;
         } catch (Exception e) {
             throw new RaftCodecException("encode message exception", e);
@@ -60,7 +70,7 @@ public class RaftCodec {
     public static Object decode(byte[] message) {
         try {
             if (message == null || message.length <= 1) {
-                throw new RaftException("rpc message format error");
+                throw new RaftException("decode rpc message error");
             }
             byte[] buffer = new byte[message.length -1];
             System.arraycopy(message, 1, buffer, 0, buffer.length);
