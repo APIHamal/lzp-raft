@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="warn" monitorInterval="30">
+
+    <Properties>
+        <!-- 需要配置日志目录 -->
+        <Property name="baseDir">/var/log/gitee</Property>
+        <Property name="appName">test-log4j2</Property>
+        <Property name="pattern">%d %-5p [%t] [%c{1.}] %.-300m%n</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${pattern}"/>
+        </Console>
+
+        <RollingFile name="File" fileName="${baseDir}/${appName}/${appName}.log" filePattern="${baseDir}/${appName}/%d{yyyyMMdd}-%i.${appName}.log">
+            <PatternLayout pattern="${pattern}"/>
+
+            <Policies>
+                <TimeBasedTriggeringPolicy/>
+                <SizeBasedTriggeringPolicy size="2048 MB"/>
+            </Policies>
+
+            <DefaultRolloverStrategy max="30">
+                <Delete basePath="${baseDir}/${appName}" maxDepth="1">
+                    <IfFileName glob="*/*.log"/>
+                    <IfLastModified age="20d"/>
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+
+    </Appenders>
+
+    <Loggers>
+        <Root level="debug" includeLocation="false" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>
