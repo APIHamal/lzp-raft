@@ -25,11 +25,11 @@ public class RaftNode implements MessageHandler {
 
     private static final int minElectionTimeout = 1000; // 最小选举超时时间
 
-    private static final int maxElectionTimeout = 3000; // 最大选举超时时间
+    private static final int maxElectionTimeout = 2000; // 最大选举超时时间
 
-    private static final int heartbeatInterval = 100; // 心跳时间间隔
+    private static final int heartbeatInterval = 50; // 心跳时间间隔
 
-    public static final int connectTimeout = 50; // 连接超时时间
+    public static final int connectTimeout = 20; // 连接超时时间
 
     private RaftRole nodeRole = RaftRole.FOLLOWER; // 当前节点的角色
 
@@ -91,9 +91,11 @@ public class RaftNode implements MessageHandler {
         currentId = endpoint.getNodeId().getText();
         rpcServer.setMessageHandler(this);
         rpcServer.setRaftGroupTable(raftGroupTable);
-        rpcServer.startRpcServer(endpoint); // 启动rpc的服务
         // 启动时都是follower状态
+        // onAppendLog在接收到消息时也会创建超时定时器
+        // 如果不先注册定时器则可能重复创建follower超时定时器
         registerFollowerTimeoutTask();
+        rpcServer.startRpcServer(endpoint); // 启动rpc的服务
     }
 
     /**
