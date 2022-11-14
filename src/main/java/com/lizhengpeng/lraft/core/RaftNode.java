@@ -92,9 +92,14 @@ public class RaftNode implements MessageHandler {
         rpcServer.setMessageHandler(this);
         rpcServer.setRaftGroupTable(raftGroupTable);
         // 启动时都是follower状态
+        // 较后加入集群的节点可能会立即接收到心跳消息
         // onAppendLog在接收到消息时也会创建超时定时器
+        // 导致在当前registerFollowerTimeoutTask调用前创建
+        // 超时任务无法使用cancelTimeoutTask方法取消任务
+        // 因为当前是主线程和rpc线程是并发的关系
         // 如果不先注册定时器则可能重复创建follower超时定时器
         registerFollowerTimeoutTask();
+        // startRpcServer的顺序必须在follower超时任务设置完成后
         rpcServer.startRpcServer(endpoint); // 启动rpc的服务
     }
 

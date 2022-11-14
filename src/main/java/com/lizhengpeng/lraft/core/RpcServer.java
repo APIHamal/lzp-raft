@@ -20,6 +20,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -147,32 +148,38 @@ public class RpcServer {
      * @throws IOException
      */
     private byte[] readRpcMessage(InputStream inputStream) throws IOException {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        byte[] buffer = new byte[64];
-        int hasRead, totalRead = 0, messageLength = -1;
+        int messageLength;
+        try {
+            messageLength = Integer.parseInt(new String(readRpcMessage(inputStream, RaftCodec.HEAD_LENGTH), StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new RaftCodecException("parser message head occur exception");
+        }
+        return readRpcMessage(inputStream, messageLength);
+    }
+
+    /**
+     * 读取指定长度的消息
+     * @param inputStream
+     * @return
+     * @throws IOException
+     */
+    private byte[] readRpcMessage(InputStream inputStream, int fixedLength) throws IOException {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[fixedLength];
+        int hasRead, total = 0;
         while ((hasRead = inputStream.read(buffer)) != -1) {
-            outputStream.write(buffer, 0, hasRead);
-            totalRead += hasRead;
-            // 判断是否读取到了head部分(解析head获取后续报文的长度)
-            if (totalRead >= RaftCodec.HEAD_LENGTH) {
-                // 解析本次发送的请求消息的长度
-                if (messageLength == -1) {
-                    try {
-                        messageLength = Integer.parseInt(new String(outputStream.toByteArray(), 0, RaftCodec.HEAD_LENGTH));
-                    } catch (Exception e) {
-                        throw new RaftCodecException("parser message head occur exception");
-                    }
-                }
-                // 解析到了请求的报文长度则解析请求内容
-                if (totalRead - RaftCodec.HEAD_LENGTH == messageLength) {
-                    byte[] message = new byte[messageLength];
-                    System.arraycopy(outputStream.toByteArray(), RaftCodec.HEAD_LENGTH, message, 0, messageLength);
-                    return message;
-                }
+            stream.write(buffer, 0, hasRead);
+            total += hasRead;
+            if (total == fixedLength) {
+                break;
+            } else {
+                buffer = new byte[fixedLength - total];
             }
         }
-        return new byte[0];
+        return stream.toByteArray();
     }
+
+
 
     /**
      * 停止rpc的服务器

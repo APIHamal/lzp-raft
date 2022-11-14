@@ -40,8 +40,8 @@ public class RaftCodec {
             byte[] jsonBytes = JSONObject.toJSONString(message).getBytes(StandardCharsets.UTF_8); // 消息内容编码
             byte[] encode = new byte[HEAD_LENGTH + 1 + jsonBytes.length]; // 整个报文的总长度
             // 头部4个字节字符串表示整个报文内容的长度
-            String head = String.valueOf(1 + jsonBytes.length);
-            byte[] headBytes = StrUtil.fillBefore(head, '0', HEAD_LENGTH).getBytes(StandardCharsets.UTF_8); // 用0填充head
+            String bodySize = String.valueOf(1 + jsonBytes.length);
+            byte[] headBytes = StrUtil.fillBefore(bodySize, '0', HEAD_LENGTH).getBytes(StandardCharsets.UTF_8); // 用0填充head
             System.arraycopy(headBytes, 0, encode, 0, HEAD_LENGTH);
 
             if (message instanceof RequestVoteMsg) {
