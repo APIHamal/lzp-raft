@@ -296,7 +296,7 @@ public class RpcServer {
         Socket rpcClient = null;
         try {
             rpcClient = new Socket();
-            rpcClient.connect(new InetSocketAddress(endpoint.getHost(), endpoint.getPort()), 100);
+            rpcClient.connect(new InetSocketAddress(endpoint.getHost(), endpoint.getPort()), RaftNode.connectTimeout);
             if (!sendMessage(endpoint, rpcClient, message)) {
                 rpcClient = null; // 发送失败的时候sendMessage会被自动关闭这里置空即可
             }

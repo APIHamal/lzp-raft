@@ -27,7 +27,9 @@ public class RaftNode implements MessageHandler {
 
     private static final int maxElectionTimeout = 3000; // 最大选举超时时间
 
-    private static final int heartbeatInterval = 500; // 心跳时间间隔
+    private static final int heartbeatInterval = 100; // 心跳时间间隔
+
+    public static final int connectTimeout = 50; // 连接超时时间
 
     private RaftRole nodeRole = RaftRole.FOLLOWER; // 当前节点的角色
 
