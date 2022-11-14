@@ -244,7 +244,7 @@ public class RpcServer {
      * @param msg
      */
     public void sendMsg(Endpoint endpoint, byte[] msg) {
-        ioExecutor.execute(() -> {
+        ioExecutor.execute(() -> { // 发送消息的时候异步
             try {
                 if (endpoint == null) {
                     throw new RaftException("send msg endpoint is null");
@@ -256,7 +256,11 @@ public class RpcServer {
                     clientHolder = rpcClientHolder.get(endpoint.getNodeId());
                 }
                 try {
-                    clientHolder.lock(); // 对同一个NodeId的连接访问进行加锁
+                    // 对同一个NodeId的连接访问进行加锁这样可以减小锁的范围
+                    // 当对同一个nodeId有多个rpc的消息时可以做优化
+                    // 可以临时开启多个socket对象来并发访问
+                    // 但是最后只保留一个有效的socket
+                    clientHolder.lock();
                     Socket rpcClient = clientHolder.getSocket();
                     if (rpcClient == null) {
                         // 创建新的客户端并且成功后进行缓存
@@ -294,7 +298,7 @@ public class RpcServer {
             rpcClient = new Socket();
             rpcClient.connect(new InetSocketAddress(endpoint.getHost(), endpoint.getPort()), 100);
             if (!sendMessage(endpoint, rpcClient, message)) {
-                return null;
+                rpcClient = null; // 发送失败的时候sendMessage会被自动关闭这里置空即可
             }
         } catch (Throwable e){
             if (e instanceof SocketTimeoutException) {
@@ -302,13 +306,14 @@ public class RpcServer {
             } else {
                 logger.info("send message failed {}", endpoint);
             }
-            if (rpcClient != null && !rpcClient.isClosed()) { // 连接对端时发生了异常则关闭连接
+            if (rpcClient != null) { // 连接对端时发生了异常则关闭连接
                 try {
-                    rpcClient.close();
+                    rpcClient.close(); // 可能被提前关闭了
                 } catch (Exception se) {
                     // Ignore exception
+                } finally {
+                    rpcClient = null; // 必须设置为null否则socket会被复用作为长连接
                 }
-                rpcClient = null;
             }
         } finally {
             return rpcClient;
