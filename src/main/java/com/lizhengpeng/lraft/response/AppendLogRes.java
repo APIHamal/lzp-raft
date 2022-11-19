@@ -11,6 +11,8 @@ public class AppendLogRes {
 
     private Boolean success;
 
+    private String nodeId;
+
     @Override
     public String toString() {
         return "AppendLogRes{" +

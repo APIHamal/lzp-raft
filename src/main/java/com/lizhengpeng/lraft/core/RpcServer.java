@@ -2,6 +2,7 @@ package com.lizhengpeng.lraft.core;
 
 import com.lizhengpeng.lraft.exception.RaftCodecException;
 import com.lizhengpeng.lraft.exception.RaftException;
+import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.AppendLogMsg;
 import com.lizhengpeng.lraft.request.RequestVoteMsg;
 import com.lizhengpeng.lraft.response.AppendLogRes;
@@ -11,7 +12,6 @@ import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.xml.soap.Node;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -103,9 +103,8 @@ public class RpcServer {
             while (true) {
                 // readRpcMessage方法解决了粘包的问题
                 // rpc包的具体格式见RaftCodec方法
-                byte[] message = readRpcMessage(client.getInputStream());
-                Object resMessage = RaftCodec.decode(message);
-                if (message == null) {
+                Object resMessage = RaftCodec.decode(readRpcMessage(client.getInputStream()));
+                if (resMessage == null) {
                     logger.warn("received message empty");
                 }
                 // 接收到投票请求
@@ -123,6 +122,10 @@ public class RpcServer {
                     // 接收到了日志同步的消息
                     AppendLogRes res = (AppendLogRes) resMessage;
                     messageHandler.onAppendLogCallback(res);
+                } else if (resMessage instanceof ClientRequestMsg) {
+                    // leader收到了来自客户端的业务操作请求
+                    ClientRequestMsg clientRequestMsg = (ClientRequestMsg) resMessage;
+                    messageHandler.onLeaderAppendLog(clientRequestMsg);
                 }
             }
         } catch (RaftCodecException e) {
@@ -178,8 +181,6 @@ public class RpcServer {
         }
         return stream.toByteArray();
     }
-
-
 
     /**
      * 停止rpc的服务器

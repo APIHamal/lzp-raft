@@ -1,5 +1,6 @@
 package com.lizhengpeng.lraft.core;
 
+import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.AppendLogMsg;
 import com.lizhengpeng.lraft.request.RequestVoteMsg;
 import com.lizhengpeng.lraft.response.AppendLogRes;
@@ -37,5 +38,11 @@ public interface MessageHandler {
      * @param requestVoteMsg
      */
     void onRequestVoteCallback(RequestVoteRes requestVoteMsg);
+
+    /**
+     * leader节点接收到日志时出发
+     * @param appendLogEntry
+     */
+    void onLeaderAppendLog(ClientRequestMsg appendLogEntry);
 
 }

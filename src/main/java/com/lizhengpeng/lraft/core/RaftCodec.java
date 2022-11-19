@@ -4,13 +4,12 @@ import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSONObject;
 import com.lizhengpeng.lraft.exception.RaftCodecException;
 import com.lizhengpeng.lraft.exception.RaftException;
+import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.AppendLogMsg;
 import com.lizhengpeng.lraft.request.RequestVoteMsg;
 import com.lizhengpeng.lraft.response.AppendLogRes;
 import com.lizhengpeng.lraft.response.RequestVoteRes;
 
-import java.io.ByteArrayOutputStream;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -30,6 +29,8 @@ public class RaftCodec {
 
     private static final byte APPEND_LOG_RES = 4;
 
+    private static final byte APPEND_LOG_ENTRY = 5;
+
     /**
      * 对指定的消息编码
      * @param message
@@ -39,7 +40,7 @@ public class RaftCodec {
         try {
             byte[] jsonBytes = JSONObject.toJSONString(message).getBytes(StandardCharsets.UTF_8); // 消息内容编码
             byte[] encode = new byte[HEAD_LENGTH + 1 + jsonBytes.length]; // 整个报文的总长度
-            // 头部4个字节字符串表示整个报文内容的长度
+            // 头部6个字节字符串表示整个报文内容的长度
             String bodySize = String.valueOf(1 + jsonBytes.length);
             byte[] headBytes = StrUtil.fillBefore(bodySize, '0', HEAD_LENGTH).getBytes(StandardCharsets.UTF_8); // 用0填充head
             System.arraycopy(headBytes, 0, encode, 0, HEAD_LENGTH);
@@ -52,6 +53,8 @@ public class RaftCodec {
                 encode[HEAD_LENGTH] = APPEND_LOG_REQ;
             } else if (message instanceof AppendLogRes) {
                 encode[HEAD_LENGTH] = APPEND_LOG_RES;
+            } else if (message instanceof ClientRequestMsg) {
+                encode[HEAD_LENGTH] = APPEND_LOG_ENTRY; // leader节点追加日志
             } else {
                 throw new RaftException("encode error un support message type");
             }
@@ -82,6 +85,8 @@ public class RaftCodec {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), AppendLogMsg.class);
             } else if (message[0] == APPEND_LOG_RES) {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), AppendLogRes.class);
+            } else if (message[0] == APPEND_LOG_ENTRY) {
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), ClientRequestMsg.class);
             } else {
                 throw new RaftException("decode error un support message type");
             }

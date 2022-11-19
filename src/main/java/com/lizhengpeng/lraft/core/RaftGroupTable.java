@@ -23,6 +23,8 @@ public class RaftGroupTable {
 
     private ConcurrentHashMap<NodeId, Endpoint> groupTable = new ConcurrentHashMap<>();
 
+    private ConcurrentHashMap<NodeId, ReplicateProgress> replicateProgress = new ConcurrentHashMap<>();
+
     /**
      * 添加节点到表中
      * @param endpoint
@@ -84,4 +86,43 @@ public class RaftGroupTable {
         logger.info("vote count half => {}", halfCount);
         return voteCount >= halfCount;
     }
+
+    /**
+     * 初始化raft节点的复制进度
+     * @param nextLogIndex
+     */
+    public void initReplicateProgress(Long nextLogIndex) {
+        groupTable.forEach((k,v) -> {
+            ReplicateProgress progress = replicateProgress.computeIfAbsent(k, f -> new ReplicateProgress());
+            progress.setMatchIndex(nextLogIndex);
+            progress.setNextIndex(nextLogIndex);
+        });
+    }
+
+    /**
+     * 更新客户端的nextIndex指标
+     * @param nextLogIndex
+     */
+    public void updateReplicateProgress(Long nextLogIndex) {
+        replicateProgress.forEach((k, v) -> v.setNextIndex(nextLogIndex));
+    }
+
+    /**
+     * 获取节点的复制进度
+     * @param nodeId
+     * @return
+     */
+    public ReplicateProgress getReplicate(String nodeId) {
+        return getReplicate(NodeId.of(nodeId));
+    }
+
+    /**
+     * 获取节点的复制进度
+     * @param nodeId
+     * @return
+     */
+    public ReplicateProgress getReplicate(NodeId nodeId) {
+        return replicateProgress.get(nodeId);
+    }
+
 }

@@ -3,8 +3,6 @@ package com.lizhengpeng.lraft.request;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.List;
-
 /**
  * 追加日志的请求
  * @author lzp
@@ -21,7 +19,7 @@ public class AppendLogMsg {
 
     private long preLogIndex;
 
-    private List<Object> entries;
+    private String entries;
 
     private long lastCommitted;
 
@@ -32,7 +30,7 @@ public class AppendLogMsg {
                 ", leaderId='" + leaderId + '\'' +
                 ", preLogTerm=" + preLogTerm +
                 ", preLogIndex=" + preLogIndex +
-                ", entries=" + entries +
+                ", entries='" + entries + '\'' +
                 ", lastCommitted=" + lastCommitted +
                 '}';
     }
