@@ -7,36 +7,38 @@ package com.lizhengpeng.lraft.core;
 public interface LogManager {
 
     /**
-     * 添加日志到节点(该方法在leader节点接收到日志时调用)
+     * 添加日志到节点
+     * 该方法在leader节点直接调用
      * @param term
      * @param entries
      */
     void appendLog(Long term, String entries);
 
     /**
-     * 获取当前的最后一条日志
-     * @return
+     * 复制从leader发送的日志数据
+     * @param raftLog
+     * @return 返回true或者false表示成功或失败来判断写入是否成功
      */
-    RaftLog getLastLog();
+    boolean replicateLog(LogEntry raftLog);
 
     /**
-     * 获取指定所以的日志数据
-     * @param logIndex
+     * 根据索引获取对应的日志
+     * @param index
      * @return
      */
-    RaftLog getRaftLog(long logIndex);
+    LogEntry getLogEntry(Long index);
+
+    /**
+     * 获取当前的最后一条日志
+     * 如果不存在则返回term|index都为0的数据
+     * @return
+     */
+    LogEntry getLastLog();
 
     /**
      * 获取下一个日志的索引
      * @return
      */
     Long getNextLogIndex();
-
-    /**
-     * 添加从leader节点接收到的日志
-     * @param raftLog
-     * @return 返回true或者false表示成功或失败来判断写入是否成功
-     */
-    boolean appendLogFromLeader(RaftLog raftLog);
 
 }

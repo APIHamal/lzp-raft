@@ -11,6 +11,12 @@ import lombok.Setter;
 @Getter
 public class ClientRequestMsg {
 
-    private String clientRequest;
+    private String msg;
 
+    @Override
+    public String toString() {
+        return "ClientRequestMsg{" +
+                "msg='" + msg + '\'' +
+                '}';
+    }
 }

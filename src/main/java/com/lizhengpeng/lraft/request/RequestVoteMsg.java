@@ -11,13 +11,13 @@ import lombok.Setter;
 @Getter
 public class RequestVoteMsg {
 
-    private long term;
+    private Long term;
 
     private String nodeId;
 
-    private long lastLogTerm;
+    private Long lastLogTerm;
 
-    private long lastLogIndex;
+    private Long lastLogIndex;
 
     @Override
     public String toString() {

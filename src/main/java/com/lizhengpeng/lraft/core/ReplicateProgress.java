@@ -22,7 +22,9 @@ public class ReplicateProgress {
     }
 
     public void incrMatchIndex() {
-        matchIndex++;
+        if (matchIndex < nextIndex) {
+            matchIndex++;
+        }
     }
 
 }

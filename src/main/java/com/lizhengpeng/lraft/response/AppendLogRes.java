@@ -13,6 +13,8 @@ public class AppendLogRes {
 
     private String nodeId;
 
+    private Long nextLogIndex;
+
     @Override
     public String toString() {
         return "AppendLogRes{" +
