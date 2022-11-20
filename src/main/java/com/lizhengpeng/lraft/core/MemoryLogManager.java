@@ -1,6 +1,8 @@
 package com.lizhengpeng.lraft.core;
 
 import cn.hutool.core.collection.ListUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,6 +13,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author lzp
  */
 public class MemoryLogManager implements LogManager {
+
+    private static final Logger logger = LoggerFactory.getLogger(MemoryLogManager.class);
 
     private static final AtomicLong nextLogIndex = new AtomicLong(1L);
 
@@ -103,7 +107,9 @@ public class MemoryLogManager implements LogManager {
      */
     @Override
     public boolean replicateLog(LogEntry raftLog) {
-        // 整个日志中的第一条数据
+        // 设置日志所属的Index因为log的preLogIndex已经确定
+        // 所以这条log自身的index也就确定了
+        raftLog.setIndex(raftLog.getPreLogIndex() + 1); // index总是递增的
         if (compare(raftLog.getPreLogTerm(), 0L) && compare(raftLog.getPreLogIndex(), 0L)) {
             logEntries.clear();
             logEntries.add(raftLog);
