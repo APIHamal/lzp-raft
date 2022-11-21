@@ -27,10 +27,6 @@ public class LogEntry {
 
     private String entries;
 
-    private Long preLogIndex;
-
-    private Long preLogTerm;
-
     private boolean logEquals(Long source, Long dest) {
         return source != null && dest != null && source.compareTo(dest) == 0;
     }
@@ -59,8 +55,6 @@ public class LogEntry {
                 ", term=" + term +
                 ", index=" + index +
                 ", entries='" + entries + '\'' +
-                ", preLogIndex=" + preLogIndex +
-                ", preLogTerm=" + preLogTerm +
                 '}';
     }
 }

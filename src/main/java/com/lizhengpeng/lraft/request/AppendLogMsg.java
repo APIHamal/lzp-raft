@@ -1,5 +1,6 @@
 package com.lizhengpeng.lraft.request;
 
+import com.lizhengpeng.lraft.core.LogEntry;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -19,7 +20,7 @@ public class AppendLogMsg {
 
     private long preLogIndex;
 
-    private String entries;
+    private LogEntry logEntry;
 
     private long lastCommitted;
 
@@ -30,7 +31,7 @@ public class AppendLogMsg {
                 ", leaderId='" + leaderId + '\'' +
                 ", preLogTerm=" + preLogTerm +
                 ", preLogIndex=" + preLogIndex +
-                ", entries='" + entries + '\'' +
+                ", logEntry=" + logEntry +
                 ", lastCommitted=" + lastCommitted +
                 '}';
     }

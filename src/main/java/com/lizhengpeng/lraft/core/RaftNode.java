@@ -11,10 +11,12 @@ import org.slf4j.LoggerFactory;
 
 import java.security.SecureRandom;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.lizhengpeng.lraft.core.MemoryLogManager.*;
+import static com.lizhengpeng.lraft.core.MemoryLogManager.compare;
+import static com.lizhengpeng.lraft.core.MemoryLogManager.great;
 
 /**
  * raft核心算法的实现
@@ -194,27 +196,26 @@ public class RaftNode implements MessageHandler {
                     //    都可能不存在此时应该发送的时心跳消息
                     // (2)日志存在则进行发送并附带上一条日志的term和index以便follower根据这两个
                     //    属性来确定日志的存放位置(主要是依靠index)
-                    LogEntry raftLog = logManager.getLogEntry(progress.getMatchIndex());
                     AppendLogMsg appendLogMsg = new AppendLogMsg();
                     appendLogMsg.setLeaderId(currentId);
                     appendLogMsg.setTerm(currentTerm.get());
-                    if (raftLog == null) {
-                        // 当前无日志消息可用则发送心跳消息
-                        // preLogIndex|preLogTerm为0表示的是集群第一条消息
-                        appendLogMsg.setPreLogTerm(-1L); // 实际上应该是发送日志的消息
-                        appendLogMsg.setPreLogIndex(-1L);
+
+                    LogEntry raftLog = logManager.getLogEntry(progress.getMatchIndex());
+                    if (raftLog != null) {
+                        // entries为空则表示是一个心跳数据
+                        // 接收到心跳消息时需要判断对应的preLogIndex|preLogTerm是否存在
+                        // 如果不存在则进行回退操作
+                        appendLogMsg.setLogEntry(raftLog);
+                    }
+                    // 获取这条日志的上一个日志
+                    LogEntry preLog = logManager.getLogEntry(progress.getMatchIndex() - 1);
+                    if (preLog == null) { // 整个集群中的第一条数据
+                        appendLogMsg.setPreLogTerm(0L);
+                        appendLogMsg.setPreLogIndex(0L);
                     } else {
-                        appendLogMsg.setEntries(raftLog.getEntries());
-                        // 获取这条日志的上一个日志
-                        LogEntry preLog = logManager.getLogEntry(progress.getMatchIndex() - 1);
-                        if (preLog == null) { // 整个集群中的第一条数据
-                            appendLogMsg.setPreLogTerm(0L);
-                            appendLogMsg.setPreLogIndex(0L);
-                        } else {
-                            // 上一条日志的具体的term和位置的信息
-                            appendLogMsg.setPreLogTerm(preLog.getTerm());
-                            appendLogMsg.setPreLogIndex(preLog.getIndex());
-                        }
+                        // 上一条日志的具体的term和位置的信息
+                        appendLogMsg.setPreLogTerm(preLog.getTerm());
+                        appendLogMsg.setPreLogIndex(preLog.getIndex());
                     }
                     rpcServer.sendMsg(endpoint, appendLogMsg); // 发送给指定的节点数据
                     logger.info("node append log => {},{},{},{}", nodeRole.name(), currentId, currentTerm.get(), appendLogMsg);
@@ -279,11 +280,36 @@ public class RaftNode implements MessageHandler {
                 // preLogIndex|preLogTerm为0表示的是第一条数据
                 // 在无日志可以复制或者复制进度从commitIndex追上了nextLogIndex的时候
                 // 转为发送心跳消息不携带任何的数据
-                if (compare(appendLogMsg.getPreLogIndex(), -1L) && compare(appendLogMsg.getPreLogTerm(), -1L)) { // 接收到心跳包直接重置超时定时器即可
-                    // 重新设置选举定时器
-                    cancelTimeoutTask();
-                    registerFollowerTimeoutTask();
-                    return;
+                if (Objects.isNull(appendLogMsg.getLogEntry())) { // 当前是心跳消息
+                    if (compare(appendLogMsg.getPreLogTerm(), 0L) && compare(appendLogMsg.getPreLogIndex(), 0L)) {
+                        // 无任何可用的消息等待同步
+                        // 当前leader节点未接收到任何的有效消息
+                        // 这个时候不存在日志的同步单纯就是一个心跳防止follower超时
+                        // 重新设置选举定时器
+//                        AppendLogRes response = new AppendLogRes();
+//                        response.setNodeId(currentId); // leader需要根据这个标识来确定对应的节点从而更新复制进度
+//                        response.setTerm(currentTerm.get());
+//                        response.setSuccess(false);
+//                        rpcServer.sendMsg(nodeId, response); // 发送rpc消息给follower对象
+                        cancelTimeoutTask();
+                        registerFollowerTimeoutTask();
+                        return;
+                    } else {
+                        // 这个时候有两种情况一种是节点完成了全部消息的同步
+                        // 还有一种是节点刚当前leader还未进行同步
+                        LogEntry logEntry = logManager.getLogEntry(appendLogMsg.getPreLogIndex());
+                        AppendLogRes response = new AppendLogRes();
+                        response.setNodeId(currentId); // leader需要根据这个标识来确定对应的节点从而更新复制进度
+                        response.setTerm(currentTerm.get());
+                        if (logEntry == null || !compare(appendLogMsg.getPreLogTerm(), logEntry.getTerm())) {
+                            response.setSuccess(false);
+                        } else {
+                            response.setSuccess(true); // 当有新的日志时可以进行同步
+                        }
+                        rpcServer.sendMsg(nodeId, response); // 发送rpc消息给follower对象
+                        cancelTimeoutTask();
+                        registerFollowerTimeoutTask();
+                    }
                 } else {
                     // follower当前无条件接收
                     AppendLogRes response = new AppendLogRes();
@@ -292,13 +318,7 @@ public class RaftNode implements MessageHandler {
 
                     // 追加从leader节点接收到的消息并进行持久化操作
                     // 如果日志匹配则添加否则返回false表示进行日志的回退操作
-                    LogEntry raftLog = LogEntry.builder()
-                            .term(appendLogMsg.getTerm())
-                            .entries(appendLogMsg.getEntries())
-                            .preLogTerm(appendLogMsg.getPreLogTerm())  // preLogTerm来确定log具体的存放的位置在哪
-                            .preLogIndex(appendLogMsg.getPreLogIndex()) // 注意在follower等节点中根据rpc消息中的preLogIndex
-                            .build();
-                    if (!logManager.replicateLog(raftLog)) { // 写入日志失败可能需要回退操作
+                    if (!logManager.replicateLog(appendLogMsg.getPreLogTerm(), appendLogMsg.getPreLogIndex(), appendLogMsg.getLogEntry())) { // 写入日志失败可能需要回退操作
                         response.setSuccess(false);
                     } else {
                         response.setSuccess(true); // 成功的写入这个时候leader根据复制进度可以提交日志了
@@ -341,6 +361,9 @@ public class RaftNode implements MessageHandler {
                 logger.warn("append log callback get node => {} progress not found", appendLogRes.getNodeId());
                 return;
             }
+            // 更新客户端的nextIndex指标
+            // leader的定时任务会不断的给follower/candidate发送消息
+            progress.setNextIndex(logManager.getNextLogIndex());
             if (appendLogRes.getSuccess() == Boolean.FALSE) {
                 progress.decrMatchIndex(); // leader节点开始回退操作
             } else {
@@ -391,7 +414,7 @@ public class RaftNode implements MessageHandler {
                 // 节点自身的最后一条日志的term比对端大或者term相等但是logIndex大的获得投票
                 // 首先比较term当term相等的时候比较index
                 if (great(requestVoteMsg.getLastLogTerm(), lastLog.getTerm()) ||
-                        (compare(requestVoteMsg.getLastLogTerm(), lastLog.getTerm()) && greatOrEquals(requestVoteMsg.getLastLogIndex(), lastLog.getIndex()))) {
+                        (compare(requestVoteMsg.getLastLogTerm(), lastLog.getTerm()) && great(requestVoteMsg.getLastLogIndex(), lastLog.getIndex()))) {
                     response.setTerm(currentTerm.get());
                     response.setSuccess(true);
                 } else {
@@ -435,6 +458,8 @@ public class RaftNode implements MessageHandler {
                 // 如果超过了半数的选票(加1是因为加上candidate节点自身)
                 if (raftGroupTable.electionSuccess(voteCount + 1)) {
                     nodeRole = RaftRole.LEADER; // 节点选举成功变成了leader
+                    // 写入一条NoOp的日志
+                    logManager.appendLog(currentTerm.get(), "LEADER_ELECTION_NOOP");
                     raftGroupTable.initReplicateProgress(logManager.getNextLogIndex()); // 初始化节点的复制进度表(始终指向leader最后一条日志的下一个位置)
                     cancelTimeoutTask(); // 取消所有的定时任务
                     registerLeaderTask(); // 注册leader节点的心跳任务
@@ -459,9 +484,6 @@ public class RaftNode implements MessageHandler {
                 // 写入日志到存储中
                 logger.info("leader received client msg => {}", clientRequestMsg.getMsg());
                 logManager.appendLog(currentTerm.get(), clientRequestMsg.getMsg());
-                // 更新客户端的nextIndex指标
-                // leader的定时任务会不断的给follower/candidate发送消息
-                raftGroupTable.updateReplicateProgress(logManager.getNextLogIndex());
             } catch (Exception e) {
                 logger.info("write leader log exception", e);
             }

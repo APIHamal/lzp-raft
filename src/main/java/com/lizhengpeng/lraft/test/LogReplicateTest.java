@@ -9,13 +9,20 @@ import java.net.Socket;
 
 public class LogReplicateTest {
     public static void main(String[] args) throws IOException {
-        Socket socket = new Socket("127.0.0.1", 8080);
-        OutputStream outputStream = socket.getOutputStream();
-        ClientRequestMsg msg = new ClientRequestMsg();
-        msg.setMsg("hello raft");
-        byte[] bytes = RaftCodec.encode(msg);
-        outputStream.write(bytes);
-        outputStream.flush();
-        socket.close();
+        int[] array = {8080,8081,8082};
+        for (int port : array) {
+            try {
+                Socket socket = new Socket("127.0.0.1", port);
+                OutputStream outputStream = socket.getOutputStream();
+                ClientRequestMsg msg = new ClientRequestMsg();
+                msg.setMsg("hello raft");
+                byte[] bytes = RaftCodec.encode(msg);
+                outputStream.write(bytes);
+                outputStream.flush();
+                socket.close();
+            } catch (Exception e) {
+                //
+            }
+        }
     }
 }

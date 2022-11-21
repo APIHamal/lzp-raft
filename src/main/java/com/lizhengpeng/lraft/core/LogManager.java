@@ -16,10 +16,12 @@ public interface LogManager {
 
     /**
      * 复制从leader发送的日志数据
+     * @param preLogTerm
+     * @param preLogIndex
      * @param raftLog
      * @return 返回true或者false表示成功或失败来判断写入是否成功
      */
-    boolean replicateLog(LogEntry raftLog);
+    boolean replicateLog(Long preLogTerm, Long preLogIndex, LogEntry raftLog);
 
     /**
      * 根据索引获取对应的日志

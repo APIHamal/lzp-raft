@@ -16,7 +16,7 @@ public class ReplicateProgress {
     private long nextIndex;
 
     public void decrMatchIndex() {
-        if (matchIndex > 0) {
+        if (matchIndex > 1) {
             matchIndex--;
         }
     }
@@ -27,4 +27,11 @@ public class ReplicateProgress {
         }
     }
 
+    @Override
+    public String toString() {
+        return "ReplicateProgress{" +
+                "matchIndex=" + matchIndex +
+                ", nextIndex=" + nextIndex +
+                '}';
+    }
 }

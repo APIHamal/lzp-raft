@@ -20,6 +20,24 @@ public class MemoryLogManager implements LogManager {
 
     private List<LogEntry> logEntries = new ArrayList<>();
 
+    {
+        new Thread(() -> {
+            List<LogEntry> entries = new ArrayList<>();
+            while (true) {
+                entries.clear();
+                entries.addAll(logEntries);
+                logger.warn("列表数据 === next => {} size => {}", nextLogIndex.get(), logEntries.size());
+                for (LogEntry logEntry : entries) {
+                    logger.warn(logEntry.toString());
+                }
+                try {
+                    Thread.sleep(1000);
+                } catch (Exception e) {
+                }
+            }
+        }).start();
+    }
+
     /**
      * 判断两个值是否相等
      * @param source
@@ -77,57 +95,31 @@ public class MemoryLogManager implements LogManager {
     }
 
     /**
-     * 根据索引创建指定的日志
-     * @param term
-     * @param index 日志对应的索引该方法自动填充preLogIndex|preLogTerm
-     * @param entries
-     * @return
-     */
-    public LogEntry createLog(Long term, Long index, String entries) {
-        LogEntry logEntry = LogEntry.builder()
-                .term(term)
-                .index(index)
-                .entries(entries)
-                .build();
-        LogEntry preLog = this.getLogEntry(index - 1);
-        if (preLog == null) { // 第一条日志的preLogIndex|preLogTerm都是0
-            logEntry.setPreLogTerm(0L);
-            logEntry.setPreLogIndex(0L);
-        } else {
-            logEntry.setPreLogTerm(preLog.getTerm());
-            logEntry.setPreLogIndex(preLog.getPreLogIndex());
-        }
-        return logEntry;
-    }
-
-    /**
      * 复制从leader节点接收到的日志
      * @param raftLog
      * @return
      */
     @Override
-    public boolean replicateLog(LogEntry raftLog) {
+    public boolean replicateLog(Long preLogTerm, Long preLogIndex, LogEntry raftLog) {
+        logger.warn("receive log => {}", raftLog);
         // 设置日志所属的Index因为log的preLogIndex已经确定
         // 所以这条log自身的index也就确定了
-        raftLog.setIndex(raftLog.getPreLogIndex() + 1); // index总是递增的
-        if (compare(raftLog.getPreLogTerm(), 0L) && compare(raftLog.getPreLogIndex(), 0L)) {
+        if (compare(preLogTerm, 0L) && compare(preLogIndex, 0L)) {
             logEntries.clear();
             logEntries.add(raftLog);
-            nextLogIndex.set(2); // 下一个日志索引的值
+            nextLogIndex.set(raftLog.getIndex() + 1); // 下一个日志索引的值
             return true;
         } else {
             // 判断索引是否匹配
             LogEntry temp = LogEntry.builder()
-                    .term(raftLog.getPreLogTerm())
-                    .index(raftLog.getPreLogIndex())
+                    .term(preLogTerm)
+                    .index(preLogIndex)
                     .build();
             int index = logEntries.indexOf(temp);
             if (index == -1) { // 未找到指定的日志项则返回false
                 return false;
             } else {
-                // 清楚待保存日志的preLogTerm和preLogIndex
-                raftLog.setPreLogIndex(null);
-                raftLog.setPreLogTerm(null);
+                nextLogIndex.set(raftLog.getIndex() + 1); // 下一条日志的索引是在当前日志基础上加一(自增)
                 // 如果preLogIndex为末尾的数据则直接添加
                 if (index == logEntries.size() - 1) {
                     logEntries.add(raftLog);
@@ -137,7 +129,6 @@ public class MemoryLogManager implements LogManager {
                     newLogEntries.add(raftLog);
                     logEntries = newLogEntries; // 更新日志列表
                 }
-                nextLogIndex.addAndGet(logEntries.size()); // 下一个日志的索引数据
                 return true;
             }
         }
