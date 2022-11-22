@@ -6,8 +6,10 @@ import com.lizhengpeng.lraft.exception.RaftCodecException;
 import com.lizhengpeng.lraft.exception.RaftException;
 import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.AppendLogMsg;
+import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
 import com.lizhengpeng.lraft.request.RequestVoteMsg;
 import com.lizhengpeng.lraft.response.AppendLogRes;
+import com.lizhengpeng.lraft.response.RefreshLeaderRes;
 import com.lizhengpeng.lraft.response.RequestVoteRes;
 
 import java.nio.charset.StandardCharsets;
@@ -30,6 +32,10 @@ public class RaftCodec {
     private static final byte APPEND_LOG_RES = 4;
 
     private static final byte APPEND_LOG_ENTRY = 5;
+
+    private static final byte REFRESH_LEADER_REQ = 6;
+
+    private static final byte REFRESH_LEADER_RES = 7;
 
     /**
      * 对指定的消息编码
@@ -55,6 +61,10 @@ public class RaftCodec {
                 encode[HEAD_LENGTH] = APPEND_LOG_RES;
             } else if (message instanceof ClientRequestMsg) {
                 encode[HEAD_LENGTH] = APPEND_LOG_ENTRY; // leader节点追加日志
+            } else if(message instanceof RefreshLeaderMsg) {
+                encode[HEAD_LENGTH] = REFRESH_LEADER_REQ; // 获取集群的leader节点信息
+            } else if(message instanceof RefreshLeaderRes) {
+                encode[HEAD_LENGTH] = REFRESH_LEADER_RES; // 获取集群的leader节点信息
             } else {
                 throw new RaftException("encode error un support message type");
             }
@@ -87,6 +97,10 @@ public class RaftCodec {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), AppendLogRes.class);
             } else if (message[0] == APPEND_LOG_ENTRY) {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), ClientRequestMsg.class);
+            } else if (message[0] == REFRESH_LEADER_REQ) {
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), RefreshLeaderMsg.class);
+            } else if (message[0] == REFRESH_LEADER_RES) {
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), RefreshLeaderRes.class);
             } else {
                 throw new RaftException("decode error un support message type");
             }
