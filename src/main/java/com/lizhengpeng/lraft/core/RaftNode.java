@@ -62,6 +62,8 @@ public class RaftNode implements MessageHandler {
 
     private LogManager logManager = new MemoryLogManager();
 
+    private volatile String raftLeaderId;
+
     /**
      * 添加集群中的
      * @param endpoint
@@ -115,6 +117,7 @@ public class RaftNode implements MessageHandler {
     public void registerFollowerTimeoutTask() {
         // 注意这里将异步的调用转为了同步的调用
         followerSchedule = taskExecutor.submit(() -> {
+            raftLeaderId = null; // 重置leaderId
             voteCount = 0; // 重新设置当前获取的票数
             nodeRole = RaftRole.CANDIDATE; // 切换角色为候选者
             currentTerm.addAndGet(1); // term首先增加1
@@ -146,6 +149,7 @@ public class RaftNode implements MessageHandler {
     public void registerCandidateTimeoutTask() {
         // 注意这里将异步的调用转为了同步的调用
         candidateSchedule = taskExecutor.submit(() -> {
+            raftLeaderId = null; // 重置集群leader
             voteCount = 0; // 重新设置当前获取的票数
             nodeRole = RaftRole.CANDIDATE; // 切换角色为候选者
             currentTerm.addAndGet(1); // term首先增加1
@@ -274,6 +278,10 @@ public class RaftNode implements MessageHandler {
                 logger.error("raft cluster found two leader, fatal error!!!");
                 return;
             }
+            // 收到来自leader节点的心跳消息后
+            // 需要记录当前raft集群的leaderId
+            // 然后去具体的成员表查询leader的地址
+            raftLeaderId = nodeId.getNodeId();
             if (nodeRole == RaftRole.FOLLOWER) {
                 // 如果当前是简单的心跳消息则重置定时器即可
                 // 否则进入日志复制的流程
