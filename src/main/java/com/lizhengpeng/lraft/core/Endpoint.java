@@ -3,6 +3,8 @@ package com.lizhengpeng.lraft.core;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.Objects;
+
 /**
  * raft节点的地址
  * @author lzp
@@ -22,6 +24,19 @@ public class Endpoint {
 
     public NodeId getNodeId() {
         return NodeId.of(host + ":" + port);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Endpoint endpoint = (Endpoint) o;
+        return Objects.equals(host, endpoint.host) && Objects.equals(port, endpoint.port);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(host, port);
     }
 
     @Override

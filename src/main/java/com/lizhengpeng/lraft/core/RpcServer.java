@@ -2,12 +2,12 @@ package com.lizhengpeng.lraft.core;
 
 import com.lizhengpeng.lraft.exception.RaftCodecException;
 import com.lizhengpeng.lraft.exception.RaftException;
-import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.AppendLogMsg;
+import com.lizhengpeng.lraft.request.ClientRequestMsg;
+import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
 import com.lizhengpeng.lraft.request.RequestVoteMsg;
 import com.lizhengpeng.lraft.response.AppendLogRes;
 import com.lizhengpeng.lraft.response.RequestVoteRes;
-import lombok.Getter;
 import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +22,11 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * rpc服务器的实现
@@ -98,6 +99,8 @@ public class RpcServer {
      */
     private void handlerMessage(Socket client) {
         try {
+            // 构造通信客户端对象
+            RpcClient rpcClient = new RpcClient(client);
             // 复用连接避免使用完后直接关闭提升整体IO的性能
             // 正常情况下对端rpc连接不出现异常这个连接不会中断
             while (true) {
@@ -106,6 +109,7 @@ public class RpcServer {
                 Object resMessage = RaftCodec.decode(readRpcMessage(client.getInputStream()));
                 if (resMessage == null) {
                     logger.warn("received message empty");
+                    continue;
                 }
                 // 接收到投票请求
                 if (resMessage instanceof RequestVoteMsg) {
@@ -125,15 +129,21 @@ public class RpcServer {
                 } else if (resMessage instanceof ClientRequestMsg) {
                     // leader收到了来自客户端的业务操作请求
                     ClientRequestMsg clientRequestMsg = (ClientRequestMsg) resMessage;
-                    messageHandler.onLeaderAppendLog(clientRequestMsg);
+                    messageHandler.onLeaderAppendLog(clientRequestMsg, rpcClient);
+                } else if (resMessage instanceof RefreshLeaderMsg) {
+                    // 客户端尝试获取leader节点
+                    RefreshLeaderMsg refreshLeaderMsg = (RefreshLeaderMsg) resMessage;
+                    messageHandler.onRefreshLeader(refreshLeaderMsg, rpcClient);
                 }
             }
         } catch (RaftCodecException e) {
             logger.info("codec message occur exception", e);
+        } catch (IOException e) {
+            logger.info("remote client => {} io exception", client.getRemoteSocketAddress());
         } catch (Exception e) {
             logger.info("read message occur exception", e);
         } finally {
-            if (client != null) {
+            if (client != null && !client.isClosed()) {
                 try {
                     client.close();
                 } catch (Exception e) {
@@ -150,13 +160,8 @@ public class RpcServer {
      * @return
      * @throws IOException
      */
-    private byte[] readRpcMessage(InputStream inputStream) throws IOException {
-        int messageLength;
-        try {
-            messageLength = Integer.parseInt(new String(readRpcMessage(inputStream, RaftCodec.HEAD_LENGTH), StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new RaftCodecException("parser message head occur exception");
-        }
+    public static byte[] readRpcMessage(InputStream inputStream) throws IOException {
+        int messageLength = Integer.parseInt(new String(readRpcMessage(inputStream, RaftCodec.HEAD_LENGTH), StandardCharsets.UTF_8));
         return readRpcMessage(inputStream, messageLength);
     }
 
@@ -166,7 +171,7 @@ public class RpcServer {
      * @return
      * @throws IOException
      */
-    private byte[] readRpcMessage(InputStream inputStream, int fixedLength) throws IOException {
+    private static byte[] readRpcMessage(InputStream inputStream, int fixedLength) throws IOException {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         byte[] buffer = new byte[fixedLength];
         int hasRead, total = 0;
@@ -356,28 +361,6 @@ public class RpcServer {
             }
             return sendResult;
         }
-    }
-
-    /**
-     * rpc客户端对象
-     * @author lzp
-     */
-    @Setter
-    @Getter
-    private class RpcClientHolder {
-
-        private Lock holderLock = new ReentrantLock();
-
-        private volatile Socket socket;
-
-        public void lock() {
-            holderLock.lock();
-        }
-
-        public void release() {
-            holderLock.unlock();;
-        }
-
     }
 
 }

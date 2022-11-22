@@ -8,9 +8,7 @@ import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.AppendLogMsg;
 import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
 import com.lizhengpeng.lraft.request.RequestVoteMsg;
-import com.lizhengpeng.lraft.response.AppendLogRes;
-import com.lizhengpeng.lraft.response.RefreshLeaderRes;
-import com.lizhengpeng.lraft.response.RequestVoteRes;
+import com.lizhengpeng.lraft.response.*;
 
 import java.nio.charset.StandardCharsets;
 
@@ -36,6 +34,10 @@ public class RaftCodec {
     private static final byte REFRESH_LEADER_REQ = 6;
 
     private static final byte REFRESH_LEADER_RES = 7;
+
+    private static final byte CLIENT_REQUEST_RES = 8;
+
+    private static final byte REDIRECT_RES = 9;
 
     /**
      * 对指定的消息编码
@@ -65,6 +67,10 @@ public class RaftCodec {
                 encode[HEAD_LENGTH] = REFRESH_LEADER_REQ; // 获取集群的leader节点信息
             } else if(message instanceof RefreshLeaderRes) {
                 encode[HEAD_LENGTH] = REFRESH_LEADER_RES; // 获取集群的leader节点信息
+            } else if (message instanceof ClientRequestRes) {
+                encode[HEAD_LENGTH] = CLIENT_REQUEST_RES; // 返回客户端响应
+            } else if (message instanceof RedirectRes) {
+                encode[HEAD_LENGTH] = REDIRECT_RES;
             } else {
                 throw new RaftException("encode error un support message type");
             }
@@ -101,6 +107,10 @@ public class RaftCodec {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), RefreshLeaderMsg.class);
             } else if (message[0] == REFRESH_LEADER_RES) {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), RefreshLeaderRes.class);
+            } else if (message[0] == CLIENT_REQUEST_RES) {
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), ClientRequestRes.class);
+            } else if (message[0] == REDIRECT_RES) {
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), RedirectRes.class);
             } else {
                 throw new RaftException("decode error un support message type");
             }

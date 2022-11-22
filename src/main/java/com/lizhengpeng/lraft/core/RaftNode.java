@@ -1,11 +1,12 @@
 package com.lizhengpeng.lraft.core;
 
+import cn.hutool.core.util.StrUtil;
 import com.lizhengpeng.lraft.exception.RaftCodecException;
 import com.lizhengpeng.lraft.request.AppendLogMsg;
 import com.lizhengpeng.lraft.request.ClientRequestMsg;
+import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
 import com.lizhengpeng.lraft.request.RequestVoteMsg;
-import com.lizhengpeng.lraft.response.AppendLogRes;
-import com.lizhengpeng.lraft.response.RequestVoteRes;
+import com.lizhengpeng.lraft.response.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +35,7 @@ public class RaftNode implements MessageHandler {
 
     public static final int connectTimeout = 20; // 连接超时时间
 
-    private RaftRole nodeRole = RaftRole.FOLLOWER; // 当前节点的角色
+    private volatile RaftRole nodeRole = RaftRole.FOLLOWER; // 当前节点的角色
 
     private String currentId;
 
@@ -294,11 +295,11 @@ public class RaftNode implements MessageHandler {
                         // 当前leader节点未接收到任何的有效消息
                         // 这个时候不存在日志的同步单纯就是一个心跳防止follower超时
                         // 重新设置选举定时器
-//                        AppendLogRes response = new AppendLogRes();
-//                        response.setNodeId(currentId); // leader需要根据这个标识来确定对应的节点从而更新复制进度
-//                        response.setTerm(currentTerm.get());
-//                        response.setSuccess(false);
-//                        rpcServer.sendMsg(nodeId, response); // 发送rpc消息给follower对象
+                        AppendLogRes response = new AppendLogRes();
+                        response.setNodeId(currentId); // leader需要根据这个标识来确定对应的节点从而更新复制进度
+                        response.setTerm(currentTerm.get());
+                        response.setSuccess(true);
+                        rpcServer.sendMsg(nodeId, response); // 回复leader节点的心跳消息
                         cancelTimeoutTask();
                         registerFollowerTimeoutTask();
                         return;
@@ -477,7 +478,7 @@ public class RaftNode implements MessageHandler {
     }
 
     @Override
-    public void onLeaderAppendLog(ClientRequestMsg clientRequestMsg) {
+    public void onLeaderAppendLog(ClientRequestMsg clientRequestMsg, RpcClient rpcClient) {
         taskExecutor.submit(() -> {
             // 如果当前不是leader节点则直接返回
             // raft是强领导者模型任何的写入都需要通过leader节点
@@ -486,14 +487,80 @@ public class RaftNode implements MessageHandler {
             // 这个地方写入其实也没问题最终还是会通过leader节点进行日志的同步
             // 这样直接过滤掉等于省去一次回退日志的rpc调用
             if (nodeRole != RaftRole.LEADER) {
+                // 如果当前不存在leader节点
+                // 可能正在选举或者发生了leaderShip
+                if (StrUtil.isBlank(raftLeaderId)) {
+                    RedirectRes refreshRes = new RedirectRes();
+                    refreshRes.setRedirect(Boolean.FALSE);
+                    refreshRes.setReason("there is currently no leader");
+                    rpcClient.sendMessage(refreshRes);
+                } else {
+                    // 获取leader节点的地址
+                    Endpoint endpoint = raftGroupTable.getEndpoint(NodeId.of(raftLeaderId));
+                    if (endpoint == null) {
+                        logger.info("refresh leader => {} endpoint not found", NodeId.of(raftLeaderId));
+                        // 返回错误响应
+                        RedirectRes redirectRes = new RedirectRes();
+                        redirectRes.setRedirect(Boolean.FALSE);
+                        redirectRes.setReason("leader endpoint not found");
+                        rpcClient.sendMessage(redirectRes);
+                    } else {
+                        // 返回leader节点的地址
+                        RedirectRes redirectRes = new RedirectRes();
+                        redirectRes.setRedirect(Boolean.TRUE);
+                        redirectRes.setReason("refresh leader success");
+                        redirectRes.setEndpoint(endpoint);
+                        rpcClient.sendMessage(redirectRes);
+                    }
+                }
+            } else {
+                try {
+                    // 写入日志到存储中
+                    logger.info("leader received client msg => {}", clientRequestMsg.getMsg());
+                    logManager.appendLog(currentTerm.get(), clientRequestMsg.getMsg());
+                    // 返回成功的消息
+                    ClientRequestRes res = new ClientRequestRes();
+                    res.setReason("rpc cluster append log success");
+                    rpcClient.sendMessage(res);
+                } catch (Exception e) {
+                    logger.info("write leader log exception", e);
+                }
+            }
+        });
+    }
+
+    @Override
+    public void onRefreshLeader(RefreshLeaderMsg refreshLeaderMsg, RpcClient rpcClient) {
+        taskExecutor.submit(() -> {
+            String leaderId = raftLeaderId;
+            if (nodeRole == RaftRole.LEADER) {
+                leaderId = currentId;
+            }
+            // 如果当前不存在leader节点
+            if (StrUtil.isBlank(leaderId)) {
+                // 返回错误响应
+                RefreshLeaderRes refreshRes = new RefreshLeaderRes();
+                refreshRes.setRefreshed(Boolean.FALSE);
+                refreshRes.setErrorMsg("there is currently no leader");
+                rpcClient.sendMessage(refreshRes);
                 return;
             }
-            try {
-                // 写入日志到存储中
-                logger.info("leader received client msg => {}", clientRequestMsg.getMsg());
-                logManager.appendLog(currentTerm.get(), clientRequestMsg.getMsg());
-            } catch (Exception e) {
-                logger.info("write leader log exception", e);
+            // 获取leader节点的地址
+            Endpoint endpoint = raftGroupTable.getEndpoint(NodeId.of(leaderId));
+            if (endpoint == null) {
+                logger.info("refresh leader => {} endpoint not found", NodeId.of(leaderId));
+                // 返回错误响应
+                RefreshLeaderRes refreshRes = new RefreshLeaderRes();
+                refreshRes.setRefreshed(Boolean.FALSE);
+                refreshRes.setErrorMsg("leader endpoint not found");
+                rpcClient.sendMessage(refreshRes);
+            } else {
+                // 返回leader节点的地址
+                RefreshLeaderRes refreshRes = new RefreshLeaderRes();
+                refreshRes.setRefreshed(Boolean.TRUE);
+                refreshRes.setErrorMsg("refresh leader success");
+                refreshRes.setEndpoint(endpoint);
+                rpcClient.sendMessage(refreshRes);
             }
         });
     }

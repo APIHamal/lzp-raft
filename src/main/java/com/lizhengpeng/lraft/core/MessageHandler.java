@@ -2,6 +2,7 @@ package com.lizhengpeng.lraft.core;
 
 import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.AppendLogMsg;
+import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
 import com.lizhengpeng.lraft.request.RequestVoteMsg;
 import com.lizhengpeng.lraft.response.AppendLogRes;
 import com.lizhengpeng.lraft.response.RequestVoteRes;
@@ -42,7 +43,15 @@ public interface MessageHandler {
     /**
      * leader节点接收到日志时出发
      * @param appendLogEntry
+     * @param rpcClient
      */
-    void onLeaderAppendLog(ClientRequestMsg appendLogEntry);
+    void onLeaderAppendLog(ClientRequestMsg appendLogEntry, RpcClient rpcClient);
+
+    /**
+     * 客户端对象
+     * @param refreshLeaderMsg
+     * @param rpcClient
+     */
+    void onRefreshLeader(RefreshLeaderMsg refreshLeaderMsg, RpcClient rpcClient);
 
 }
