@@ -69,22 +69,35 @@ public class RaftGroupTable {
     }
 
     /**
+     * 判断是否过半
+     * @param count
+     * @return
+     */
+    public boolean greatHalf(long count) {
+        return (count + 1) >= getHalfCount(); // 加上leader节点自身
+    }
+
+    /**
+     * 获取raft集群的过半数量
+     * @return
+     */
+    public long getHalfCount() {
+        int total = groupTable.size();
+        if (total % 2 == 0) { // 偶数节点的集群
+            return  (total / 2) + 1;
+        } else { // 奇数节点的集群
+           return (total + 1) / 2;
+        }
+    }
+
+    /**
      * 选举成功
      * @param voteCount
      * @return
      */
     public boolean electionSuccess(long voteCount) {
-        logger.info("vote count => {}", voteCount);
-        int halfCount = groupTable.size();
-        if (halfCount % 2 == 0) {
-            // 偶数节点的集群
-            halfCount = (halfCount / 2) + 1;
-        } else {
-            // 奇数节点的集群
-            halfCount = (halfCount + 1) / 2;
-        }
-        logger.info("vote count half => {}", halfCount);
-        return voteCount >= halfCount;
+        logger.info("vote count => {} half => {}", voteCount , getHalfCount());
+        return voteCount >= getHalfCount();
     }
 
     /**

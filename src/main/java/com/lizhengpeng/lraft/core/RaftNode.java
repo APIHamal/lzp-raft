@@ -11,8 +11,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.security.SecureRandom;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -59,11 +61,15 @@ public class RaftNode implements MessageHandler {
 
     private ScheduledFuture<?> leaderSchedule;
 
+    private ScheduledFuture<?> leadershipSchedule; // leader节点未收到消息时自动退化
+
     private SecureRandom secureRandom = new SecureRandom();
 
     private LogManager logManager = new MemoryLogManager();
 
     private volatile String raftLeaderId;
+
+    private Set<NodeId> heartbeatBox = new HashSet<>();
 
     /**
      * 添加集群中的
@@ -234,12 +240,40 @@ public class RaftNode implements MessageHandler {
     }
 
     /**
+     * 注册follower节点的超时任务
+     * @return
+     */
+    public void registerLeadershipTask() {
+        // 注意这里将异步的调用转为了同步的调用
+        leadershipSchedule = taskExecutor.submit(() -> {
+            // 在一个随机超时的时间内leader没有收到follower/candidate的心跳消息
+            // 并且没有收到一个term比自己大的投票或者新leader的心跳
+            // 则有可能当前出现了网络分区或者follower/candidate发生了宕机
+            // 这个时候集群其实已经没有了过半的服务器需要停止写入支持
+            // 退化成leader也可以
+            if (!raftGroupTable.greatHalf(heartbeatBox.size())) {
+                logger.warn("raft happen leader ship !!!");
+                // 节点变成了follower节点停止写入支持
+                // 重新注册follower节点的定时器
+                nodeRole = RaftRole.FOLLOWER;
+                cancelTimeoutTask();
+                registerFollowerTimeoutTask();
+            } else {
+                heartbeatBox.clear(); // 清空并继续收集
+                // 重复的注册
+                registerLeadershipTask();
+            }
+        }, heartbeatInterval * 10); // 10个心跳周期内未收到heartbeat心跳回复则退化成follower
+    }
+
+    /**
      * 取消已经注册的定时任务
      */
     public void cancelTimeoutTask() {
         cancelTimeoutTask(followerSchedule);
         cancelTimeoutTask(candidateSchedule);
         cancelTimeoutTask(leaderSchedule);
+        cancelTimeoutTask(leadershipSchedule);
     }
 
     /**
@@ -300,8 +334,9 @@ public class RaftNode implements MessageHandler {
                         response.setTerm(currentTerm.get());
                         response.setSuccess(true);
                         rpcServer.sendMsg(nodeId, response); // 回复leader节点的心跳消息
-                        cancelTimeoutTask();
-                        registerFollowerTimeoutTask();
+
+                        cancelTimeoutTask(); // 取消定时任务
+                        registerFollowerTimeoutTask(); // 重新注册follower超时任务
                         return;
                     } else {
                         // 这个时候有两种情况一种是节点完成了全部消息的同步
@@ -370,6 +405,11 @@ public class RaftNode implements MessageHandler {
                 logger.warn("append log callback get node => {} progress not found", appendLogRes.getNodeId());
                 return;
             }
+            // 收到leader节点的心跳消息
+            // 则更新heartbeatBox用来判断当前集群是否正常的工作
+            // 目的是为了让leader节点可以感知到和follower节点的
+            // 通信是否正常
+            heartbeatBox.add(NodeId.of(appendLogRes.getNodeId()));
             // 更新客户端的nextIndex指标
             // leader的定时任务会不断的给follower/candidate发送消息
             progress.setNextIndex(logManager.getNextLogIndex());
@@ -472,6 +512,8 @@ public class RaftNode implements MessageHandler {
                     raftGroupTable.initReplicateProgress(logManager.getNextLogIndex()); // 初始化节点的复制进度表(始终指向leader最后一条日志的下一个位置)
                     cancelTimeoutTask(); // 取消所有的定时任务
                     registerLeaderTask(); // 注册leader节点的心跳任务
+                    heartbeatBox.clear(); // 清空列表
+                    registerLeadershipTask(); // 注册leadership超时任务
                 }
             }
         });
