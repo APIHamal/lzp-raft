@@ -1,5 +1,6 @@
 package com.lizhengpeng.lraft.core;
 
+import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.StrUtil;
 import com.lizhengpeng.lraft.exception.RaftCodecException;
 import com.lizhengpeng.lraft.request.AppendLogMsg;
@@ -196,7 +197,7 @@ public class RaftNode implements MessageHandler {
                     // ReplicateProgress成员复制进度表会在节点成为leader的时候初始化
                     ReplicateProgress progress = raftGroupTable.getReplicate(endpoint.getNodeId());
                     if (progress == null) {
-                        logger.info("node => {} replicate process not found", endpoint);
+                        logger.warn("node => {} replicate process not found", endpoint);
                         continue; // 跳过当前节点的处理
                     }
                     // 获取对应的matchIndex的日志数据
@@ -229,7 +230,7 @@ public class RaftNode implements MessageHandler {
                         appendLogMsg.setPreLogIndex(preLog.getIndex());
                     }
                     rpcServer.sendMsg(endpoint, appendLogMsg); // 发送给指定的节点数据
-                    logger.info("node append log => {},{},{},{}", nodeRole.name(), currentId, currentTerm.get(), appendLogMsg);
+                    logger.debug("send append log to => {},{}", endpoint, appendLogMsg);
                 }
             } catch (RaftCodecException e) {
                 logger.info("broadcast codec exception", e);
@@ -293,7 +294,7 @@ public class RaftNode implements MessageHandler {
     @Override
     public void onAppendLog(NodeId nodeId, AppendLogMsg appendLogMsg) {
         taskExecutor.submit(() -> {
-            logger.info("receive append log {},{}", nodeId, appendLogMsg);
+            logger.debug("node receive append log {},{}", nodeId, appendLogMsg);
             if (appendLogMsg.getTerm() < currentTerm.get()) {
                 AppendLogRes response = new AppendLogRes();
                 response.setTerm(currentTerm.get());
@@ -388,7 +389,7 @@ public class RaftNode implements MessageHandler {
     @Override
     public void onAppendLogCallback(AppendLogRes appendLogRes) {
         taskExecutor.submit(() -> {
-//            logger.info("receive append log callback [{}]", appendLogRes);
+            logger.debug("node receive append log callback [{}]", appendLogRes);
             if (appendLogRes.getTerm() > currentTerm.get()) {
                // 当前的leader节点退化成follower节点并等待心跳
                 nodeRole = RaftRole.FOLLOWER;
@@ -405,6 +406,9 @@ public class RaftNode implements MessageHandler {
                 logger.warn("append log callback get node => {} progress not found", appendLogRes.getNodeId());
                 return;
             }
+            double percent= (double) progress.getMatchIndex() / progress.getNextIndex();
+            String percentFormat = NumberUtil.decimalFormat("#.##%", percent);
+            logger.info("node => {} replicate progress matchIndex => {} nextIndex => {} percent => {}", NodeId.of(appendLogRes.getNodeId()), progress.getMatchIndex(), progress.getNextIndex(), percentFormat);
             // 收到leader节点的心跳消息
             // 则更新heartbeatBox用来判断当前集群是否正常的工作
             // 目的是为了让leader节点可以感知到和follower节点的
@@ -490,7 +494,7 @@ public class RaftNode implements MessageHandler {
 
     @Override
     public void onRequestVoteCallback(RequestVoteRes res) {
-//        logger.info("receive vote callback [{}]", res);
+        logger.info("receive vote callback {}", res);
         taskExecutor.submit(() -> {
             if (currentTerm.get() < res.getTerm()) {
                 currentTerm.set(res.getTerm());
@@ -502,7 +506,7 @@ public class RaftNode implements MessageHandler {
             // 当前如果仍然是候选者节点
             // 则判断票数是否过半了
             if (res.getSuccess() == Boolean.TRUE) {
-                logger.info("leader election => {},{}", currentId, currentTerm.get());
+                logger.info("leader success election => {},{}", currentId, currentTerm.get());
                 voteCount++;
                 // 如果超过了半数的选票(加1是因为加上candidate节点自身)
                 if (raftGroupTable.electionSuccess(voteCount + 1)) {
@@ -540,7 +544,7 @@ public class RaftNode implements MessageHandler {
                     // 获取leader节点的地址
                     Endpoint endpoint = raftGroupTable.getEndpoint(NodeId.of(raftLeaderId));
                     if (endpoint == null) {
-                        logger.info("refresh leader => {} endpoint not found", NodeId.of(raftLeaderId));
+                        logger.debug("refresh leader => {} endpoint not found", NodeId.of(raftLeaderId));
                         // 返回错误响应
                         RedirectRes redirectRes = new RedirectRes();
                         redirectRes.setRedirect(Boolean.FALSE);
@@ -558,7 +562,7 @@ public class RaftNode implements MessageHandler {
             } else {
                 try {
                     // 写入日志到存储中
-                    logger.info("leader received client msg => {}", clientRequestMsg.getMsg());
+                    logger.debug("leader received client msg => {}", clientRequestMsg.getMsg());
                     logManager.appendLog(currentTerm.get(), clientRequestMsg.getMsg());
                     // 返回成功的消息
                     ClientRequestRes res = new ClientRequestRes();
@@ -590,7 +594,7 @@ public class RaftNode implements MessageHandler {
             // 获取leader节点的地址
             Endpoint endpoint = raftGroupTable.getEndpoint(NodeId.of(leaderId));
             if (endpoint == null) {
-                logger.info("refresh leader => {} endpoint not found", NodeId.of(leaderId));
+                logger.debug("refresh leader => {} endpoint not found", NodeId.of(leaderId));
                 // 返回错误响应
                 RefreshLeaderRes refreshRes = new RefreshLeaderRes();
                 refreshRes.setRefreshed(Boolean.FALSE);

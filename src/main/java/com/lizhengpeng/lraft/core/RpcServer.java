@@ -315,7 +315,7 @@ public class RpcServer {
             }
         } catch (Throwable e){
             if (e instanceof SocketTimeoutException) {
-                logger.info("try connect timeout {}", endpoint);
+                logger.debug("try connect timeout {}", endpoint);
             } else {
                 logger.info("send message failed {}", endpoint);
             }

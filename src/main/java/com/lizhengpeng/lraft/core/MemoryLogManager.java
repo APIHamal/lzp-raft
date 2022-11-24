@@ -20,24 +20,6 @@ public class MemoryLogManager implements LogManager {
 
     private List<LogEntry> logEntries = new ArrayList<>();
 
-    {
-        new Thread(() -> {
-            List<LogEntry> entries = new ArrayList<>();
-            while (true) {
-                entries.clear();
-                entries.addAll(logEntries);
-                logger.warn("列表数据 === next => {} size => {}", nextLogIndex.get(), logEntries.size());
-                for (LogEntry logEntry : entries) {
-                    logger.warn(logEntry.toString());
-                }
-                try {
-                    Thread.sleep(1000);
-                } catch (Exception e) {
-                }
-            }
-        }).start();
-    }
-
     /**
      * 判断两个值是否相等
      * @param source

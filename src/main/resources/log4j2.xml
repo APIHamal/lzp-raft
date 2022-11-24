@@ -32,7 +32,7 @@
     </Appenders>
 
     <Loggers>
-        <Root level="warn" includeLocation="false" additivity="false">
+        <Root level="info" includeLocation="false" additivity="false">
             <AppenderRef ref="Console"/>
         </Root>
     </Loggers>
