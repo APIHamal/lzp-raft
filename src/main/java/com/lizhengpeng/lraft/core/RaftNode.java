@@ -49,6 +49,8 @@ public class RaftNode implements MessageHandler {
 
     private long voteCount; // 当前候选者节点得到的票数
 
+    private volatile long lastCommitted = 0;
+
     private AtomicLong currentTerm = new AtomicLong(0); // 当前节点的任期
 
     private RaftGroupTable raftGroupTable = new RaftGroupTable(); // 集群成员表
@@ -218,6 +220,7 @@ public class RaftNode implements MessageHandler {
                     AppendLogMsg appendLogMsg = new AppendLogMsg();
                     appendLogMsg.setLeaderId(currentId);
                     appendLogMsg.setTerm(currentTerm.get());
+                    appendLogMsg.setLastCommitted(lastCommitted); // 当前可以提交的索引的位置
 
                     LogEntry raftLog = logManager.getLogEntry(progress.getMatchIndex());
                     if (raftLog != null) {
@@ -430,6 +433,10 @@ public class RaftNode implements MessageHandler {
                 // 日志如果被复制过半了
                 // 则需要通知客户端的回调
                 if (raftGroupTable.replicateGreatHalf(progress.getMatchIndex())) {
+                    // 更新最后提交的索引位置
+                    if (progress.getMatchIndex() > lastCommitted) {
+                        lastCommitted = progress.getMatchIndex(); // 推进最后提交索引的位置
+                    }
                     RaftListener raftListener = listenerBox.get(progress.getMatchIndex());
                     // 如果回调存在则触发
                     if (raftListener != null) {
