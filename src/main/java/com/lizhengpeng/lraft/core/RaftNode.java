@@ -329,6 +329,10 @@ public class RaftNode implements MessageHandler {
             // 然后去具体的成员表查询leader的地址
             raftLeaderId = nodeId.getNodeId();
             if (nodeRole == RaftRole.FOLLOWER) {
+                // 推进可提交的日志的进度
+                if (lastCommitted < appendLogMsg.getLastCommitted()) {
+                    lastCommitted = appendLogMsg.getLastCommitted(); // 推进日志的提交进度
+                }
                 // 如果当前是简单的心跳消息则重置定时器即可
                 // 否则进入日志复制的流程
                 // preLogIndex|preLogTerm为0表示的是第一条数据
