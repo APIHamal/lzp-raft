@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * raft集群成员信息
@@ -136,6 +137,22 @@ public class RaftGroupTable {
      */
     public ReplicateProgress getReplicate(NodeId nodeId) {
         return replicateProgress.get(nodeId);
+    }
+
+    /**
+     * 判断日志的复制是否过半
+     * @param replicateIndex
+     * @return
+     */
+    public boolean replicateGreatHalf(Long replicateIndex) {
+        if (replicateIndex == null) {
+            return false;
+        }
+        List<ReplicateProgress> progressList = replicateProgress.values()
+                .stream()
+                .filter(item -> item.getMatchIndex() >= replicateIndex)
+                .collect(Collectors.toList());
+        return progressList.size() >= getHalfCount(); // 大于过半的集群节点
     }
 
 }

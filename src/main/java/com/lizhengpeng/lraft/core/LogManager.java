@@ -12,7 +12,7 @@ public interface LogManager {
      * @param term
      * @param entries
      */
-    void appendLog(Long term, String entries);
+    LogEntry appendLog(Long term, String entries);
 
     /**
      * 复制从leader发送的日志数据

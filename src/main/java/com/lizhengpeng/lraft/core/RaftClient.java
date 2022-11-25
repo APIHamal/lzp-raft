@@ -4,7 +4,7 @@ import cn.hutool.core.collection.CollUtil;
 import com.lizhengpeng.lraft.exception.RaftException;
 import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
-import com.lizhengpeng.lraft.response.ClientRequestRes;
+import com.lizhengpeng.lraft.response.AppendLogCall;
 import com.lizhengpeng.lraft.response.RedirectRes;
 import com.lizhengpeng.lraft.response.RefreshLeaderRes;
 import org.slf4j.Logger;
@@ -54,7 +54,7 @@ public class RaftClient {
      * @param requestMsg
      * @return
      */
-    public synchronized ClientRequestRes sendRequestSync(ClientRequestMsg requestMsg) {
+    public synchronized AppendLogCall sendRequestSync(ClientRequestMsg requestMsg) {
         if (leaderEndpoint == null) { // raft集群中的leader服务器的地址未知
             refreshRaftLeader(); // 重新获取一次leader的地址
             if (leaderEndpoint == null) {
@@ -73,7 +73,7 @@ public class RaftClient {
      * @param redirectCount
      * @return
      */
-    private synchronized ClientRequestRes autoRedirectSendRequest(Endpoint endpoint, ClientRequestMsg clientRequestMsg, int redirectCount) {
+    private synchronized AppendLogCall autoRedirectSendRequest(Endpoint endpoint, ClientRequestMsg clientRequestMsg, int redirectCount) {
         if (redirectCount > MAX_REDIRECT_COUNT) { // 重定向达到阈值则直接报错处理
             leaderEndpoint = null; // 多次重定向发生了错误则清楚leader的地址
             throw new RaftException("send msg failed");
@@ -95,8 +95,8 @@ public class RaftClient {
                 leaderEndpoint = null;
                 throw new RaftException("leader endpoint un know");
             }
-        } else if (response instanceof ClientRequestRes) {
-            return (ClientRequestRes) response;
+        } else if (response instanceof AppendLogCall) {
+            return (AppendLogCall) response;
         } else {
             leaderEndpoint = null;
             throw new RaftException("send msg failed");

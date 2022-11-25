@@ -67,13 +67,14 @@ public class MemoryLogManager implements LogManager {
      * @return
      */
     @Override
-    public void appendLog(Long term, String entries) {
+    public LogEntry appendLog(Long term, String entries) {
         LogEntry logEntry = LogEntry.builder()
                 .term(term)
                 .index(nextLogIndex.getAndAdd(1))
                 .entries(entries)
                 .build();
         logEntries.add(logEntry);
+        return logEntry;
     }
 
     /**
