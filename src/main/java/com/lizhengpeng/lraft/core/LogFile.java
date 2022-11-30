@@ -145,5 +145,14 @@ public class LogFile {
         }
     }
 
-
+    @Override
+    public String toString() {
+        return "LogFile{" +
+                "fileName='" + fileName + '\'' +
+                ", startIndex=" + startIndex +
+                ", endIndex=" + endIndex +
+                ", accessFile=" + accessFile +
+                ", logEntries=" + logEntries +
+                '}';
+    }
 }

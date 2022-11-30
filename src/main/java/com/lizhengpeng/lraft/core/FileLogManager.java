@@ -207,7 +207,7 @@ public class FileLogManager implements LogManager {
             if (compare(preLogTerm, 0L) && compare(preLogIndex, 0L)) {
                 // 日志文件非空则需要进行删除复制第一条数据一定是清空的状态
                 cleanRaftLog(-1L); // 清空所有的日志数据
-                this.appendLog(raftLog.getEntries());
+                this.appendLog(raftLog.getTerm(), raftLog.getEntries());
                 return true;
             } else {
                 // 判断日志是否匹配如果不匹配则需要进行回退
@@ -218,7 +218,7 @@ public class FileLogManager implements LogManager {
                     // 存在匹配日志项目的情况下需要判断
                     // preLogIndex与最后的日志项索引匹配则应该直接添加
                     if (preLogIndex == raftMeta.getLastLogIndex()) {
-                        this.appendLog(raftLog.getEntries());
+                        this.appendLog(raftLog.getTerm(), raftLog.getEntries());
                         return true;
                     } else {
                         // 日志在preLogIndex的位置匹配则需要删除preLogIndex之后的所有日志(可能存在)
