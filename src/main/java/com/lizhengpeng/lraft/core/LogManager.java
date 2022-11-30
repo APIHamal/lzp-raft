@@ -9,10 +9,19 @@ public interface LogManager {
     /**
      * 添加日志到节点
      * 该方法在leader节点直接调用
+     * @param entries
+     * @return
+     */
+    long appendLog(String entries);
+
+    /**
+     * 添加日志到节点
+     * 该方法在leader节点直接调用
      * @param term
      * @param entries
+     * @return
      */
-    LogEntry appendLog(Long term, String entries);
+    long appendLog(Long term, String entries);
 
     /**
      * 复制从leader发送的日志数据

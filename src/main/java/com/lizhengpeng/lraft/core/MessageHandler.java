@@ -48,7 +48,7 @@ public interface MessageHandler {
     void onLeaderAppendLog(ClientRequestMsg appendLogEntry, RpcClient rpcClient);
 
     /**
-     * 客户端对象
+     * 客户端获取leader节点
      * @param refreshLeaderMsg
      * @param rpcClient
      */

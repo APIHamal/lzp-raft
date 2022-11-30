@@ -51,6 +51,12 @@ public class RpcServer {
 
     private ConcurrentHashMap<NodeId, RpcClientHolder> rpcClientHolder = new ConcurrentHashMap<>();
 
+    private RaftOptions raftOptions;
+
+    public RpcServer(RaftOptions raftOptions) {
+        this.raftOptions = raftOptions;
+    }
+
     /**
      * 启动rpc服务的监听器
      * @param endpoint
@@ -103,7 +109,7 @@ public class RpcServer {
             RpcClient rpcClient = new RpcClient(client);
             // 复用连接避免使用完后直接关闭提升整体IO的性能
             // 正常情况下对端rpc连接不出现异常这个连接不会中断
-            while (true) {
+            while (status.get()) {
                 // readRpcMessage方法解决了粘包的问题
                 // rpc包的具体格式见RaftCodec方法
                 Object resMessage = RaftCodec.decode(readRpcMessage(client.getInputStream()));
@@ -309,7 +315,7 @@ public class RpcServer {
         Socket rpcClient = null;
         try {
             rpcClient = new Socket();
-            rpcClient.connect(new InetSocketAddress(endpoint.getHost(), endpoint.getPort()), RaftNode.connectTimeout);
+            rpcClient.connect(new InetSocketAddress(endpoint.getHost(), endpoint.getPort()), raftOptions.connectTimeout);
             if (!sendMessage(endpoint, rpcClient, message)) {
                 rpcClient = null; // 发送失败的时候sendMessage会被自动关闭这里置空即可
             }

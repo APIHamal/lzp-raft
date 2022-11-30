@@ -2,6 +2,7 @@ package com.lizhengpeng.lraft.test;
 
 import com.lizhengpeng.lraft.core.Endpoint;
 import com.lizhengpeng.lraft.core.RaftNode;
+import com.lizhengpeng.lraft.core.RaftOptions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,8 +17,12 @@ public class lRaftTest8080 {
         endpoints.add(endpoint8081);
         endpoints.add(endpoint8082);
         // 8080端口启动raft节点
+        RaftOptions raftOptions = new RaftOptions();
+        raftOptions.setLogDir("C:\\raft_dir\\8080");
         new Thread(() -> {
-            RaftNode raftNode = new RaftNode();
+            RaftNode raftNode = new RaftNode(raftOptions, (command) -> {
+                System.out.println("状态机输出"+command);
+            });
             raftNode.addGroupMember(endpoints);
             raftNode.startRaftServer(endpoint8080);
         }).start();

@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.lizhengpeng.lraft.core.RaftUtils.*;
+
 /**
  * 基于内存实现的日志存储管理
  * @author lzp
@@ -20,61 +22,31 @@ public class MemoryLogManager implements LogManager {
 
     private List<LogEntry> logEntries = new ArrayList<>();
 
-    /**
-     * 判断两个值是否相等
-     * @param source
-     * @param dest
-     * @return
-     */
-    public static boolean compare(Long source, Long dest) {
-        return compare(source, dest, 0);
-    }
+    private RaftNode raftNode;
 
-    /**
-     * 判断两个值是否相等
-     * @param source
-     * @param dest
-     * @return
-     */
-    public static boolean great(Long source, Long dest) {
-        return  source != null && dest != null && source.compareTo(dest) > 0;
-    }
-
-    /**
-     * 判断两个值是否相等
-     * @param source
-     * @param dest
-     * @return
-     */
-    public static boolean greatOrEquals(Long source, Long dest) {
-        return  source != null && dest != null && source.compareTo(dest) >= 0;
-    }
-
-    /**
-     * 判断两个值是否相等
-     * @param source
-     * @param dest
-     * @return
-     */
-    public static boolean compare(Long source, Long dest, int compareRes) {
-        return source != null && dest != null && source.compareTo(dest) == compareRes;
+    public MemoryLogManager(RaftNode raftNode) {
+        this.raftNode = raftNode;
     }
 
     /**
      * 添加日志到列表中
-     * @param term
      * @param entries
      * @return
      */
     @Override
-    public LogEntry appendLog(Long term, String entries) {
+    public long appendLog(String entries) {
+        return this.appendLog(raftNode.getCurrentTerm(), entries);
+    }
+
+    @Override
+    public long appendLog(Long term, String entries) {
         LogEntry logEntry = LogEntry.builder()
-                .term(term)
+                .term(raftNode.getCurrentTerm())
                 .index(nextLogIndex.getAndAdd(1))
                 .entries(entries)
                 .build();
         logEntries.add(logEntry);
-        return logEntry;
+        return logEntry.getIndex();
     }
 
     /**
