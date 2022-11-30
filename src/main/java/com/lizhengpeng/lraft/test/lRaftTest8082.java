@@ -20,9 +20,7 @@ public class lRaftTest8082 {
         RaftOptions raftOptions = new RaftOptions();
         raftOptions.setLogDir("C:\\raft_dir\\8082");
         new Thread(() -> {
-            RaftNode raftNode = new RaftNode(raftOptions, (command) -> {
-                System.out.println("状态机输出"+command);
-            });
+            RaftNode raftNode = new RaftNode(raftOptions, SimplePrintStateMachine.INSTANCE);
             raftNode.addGroupMember(endpoints);
             raftNode.startRaftServer(endpoint8082);
         }).start();

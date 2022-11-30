@@ -46,10 +46,4 @@ public interface LogManager {
      */
     LogEntry getLastLog();
 
-    /**
-     * 获取下一个日志的索引
-     * @return
-     */
-    Long getNextLogIndex();
-
 }

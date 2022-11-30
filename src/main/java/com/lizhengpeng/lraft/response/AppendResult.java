@@ -9,11 +9,11 @@ import lombok.Setter;
  */
 @Setter
 @Getter
-public class AppendLogCall {
+public class AppendResult {
+
+    private Boolean status;
 
     private String reason;
-
-    private RedirectRes redirectRes;
 
     @Override
     public String toString() {

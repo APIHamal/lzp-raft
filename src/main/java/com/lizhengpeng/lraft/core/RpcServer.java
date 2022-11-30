@@ -68,7 +68,7 @@ public class RpcServer {
         if (endpoint == null) {
             throw new RaftException("rpc server address error");
         }
-        logger.info("rpc server config {}", endpoint);
+        logger.debug("rpc server config {}", endpoint);
         try {
             rpcServerId = endpoint.getNodeId();
             serverSocket = new ServerSocket();
@@ -81,9 +81,9 @@ public class RpcServer {
                         // 通常一个集群的规模不会很大
                         ioExecutor.execute(() -> handlerMessage(rpcClient));
                     } catch (RaftCodecException e) {
-                        logger.info("codec message occur exception", e);
+                        logger.debug("codec message occur exception", e);
                     } catch (Exception e) {
-                        logger.info("accept socket occur exception", e);
+                        logger.debug("accept socket occur exception", e);
                     }
                 }
             }, "rpc server thread");
@@ -93,7 +93,7 @@ public class RpcServer {
             throw new RaftException("rpc server start failed", e);
         } finally {
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                logger.info("run hook close socket");
+                logger.debug("run hook close socket");
                 RpcServer.this.stopRpcServer(); // 停止当前服务器的运行
             }));
         }
@@ -143,11 +143,11 @@ public class RpcServer {
                 }
             }
         } catch (RaftCodecException e) {
-            logger.info("codec message occur exception", e);
+            logger.debug("codec message occur exception", e);
         } catch (IOException e) {
-            logger.info("remote client => {} io exception", client.getRemoteSocketAddress());
+            logger.debug("remote client => {} io exception", client.getRemoteSocketAddress());
         } catch (Exception e) {
-            logger.info("read message occur exception", e);
+            logger.debug("read message occur exception", e);
         } finally {
             if (client != null && !client.isClosed()) {
                 try {
@@ -203,14 +203,14 @@ public class RpcServer {
                 serverSocket.close();
             }
         } catch (Exception e) {
-            logger.info("close server socket", e);
+            logger.debug("close server socket", e);
         }
         try {
             if (ioExecutor != null) {
                 ioExecutor.shutdown();
             }
         } catch (Exception e) {
-            logger.info("close io executor", e);
+            logger.debug("close io executor", e);
         }
     }
 
@@ -227,7 +227,7 @@ public class RpcServer {
                 sendMsg(endpoint, msgBody); // 发送数据到对端
             }
         } catch (RaftCodecException e) {
-            logger.info("broadcast codec exception", e);
+            logger.debug("broadcast codec exception", e);
         }
     }
 
@@ -240,7 +240,7 @@ public class RpcServer {
         try {
             sendMsg(raftGroupTable.getEndpoint(nodeId), msg);
         } catch (Exception e) {
-            logger.info("send msg failed {}", nodeId);
+            logger.debug("send msg failed {}", nodeId);
         }
     }
 
@@ -253,7 +253,7 @@ public class RpcServer {
         try {
             sendMsg(endpoint, RaftCodec.encode(msg));
         } catch (Exception e) {
-            logger.info("send msg failed {}", endpoint);
+            logger.debug("send msg failed {}", endpoint);
         }
     }
 
@@ -301,7 +301,7 @@ public class RpcServer {
                     clientHolder.release();
                 }
             } catch (Exception e) {
-                logger.info("io executor occur exception", e);
+                logger.debug("io executor occur exception", e);
             }
         });
     }
@@ -323,7 +323,7 @@ public class RpcServer {
             if (e instanceof SocketTimeoutException) {
                 logger.debug("try connect timeout {}", endpoint);
             } else {
-                logger.info("send message failed {}", endpoint);
+                logger.debug("send message failed {}", endpoint);
             }
             if (rpcClient != null) { // 连接对端时发生了异常则关闭连接
                 try {
@@ -353,10 +353,10 @@ public class RpcServer {
             stream.flush();
         } catch (SocketTimeoutException e) {
             sendResult = false;
-            logger.info("send msg timeout ", endpoint);
+            logger.debug("send msg timeout ", endpoint);
         } catch (Exception e) {
             sendResult = false;
-            logger.info("send msg failed {}", endpoint, e);
+            logger.debug("send msg failed {}", endpoint, e);
         } finally {
             if (!sendResult) { // 发送消息失败时关闭socket对象
                 try {

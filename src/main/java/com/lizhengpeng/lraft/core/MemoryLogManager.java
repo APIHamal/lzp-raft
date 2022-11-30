@@ -124,13 +124,4 @@ public class MemoryLogManager implements LogManager {
         return logEntries.get(logEntries.size() - 1);
     }
 
-    /**
-     * 获取下一条日志的索引数据
-     * @return
-     */
-    @Override
-    public Long getNextLogIndex() {
-        return nextLogIndex.get();
-    }
-
 }

@@ -67,7 +67,7 @@ public class RaftCodec {
                 encode[HEAD_LENGTH] = REFRESH_LEADER_REQ; // 获取集群的leader节点信息
             } else if(message instanceof RefreshLeaderRes) {
                 encode[HEAD_LENGTH] = REFRESH_LEADER_RES; // 获取集群的leader节点信息
-            } else if (message instanceof AppendLogCall) {
+            } else if (message instanceof AppendResult) {
                 encode[HEAD_LENGTH] = CLIENT_REQUEST_RES; // 返回客户端响应
             } else if (message instanceof RedirectRes) {
                 encode[HEAD_LENGTH] = REDIRECT_RES;
@@ -108,7 +108,7 @@ public class RaftCodec {
             } else if (message[0] == REFRESH_LEADER_RES) {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), RefreshLeaderRes.class);
             } else if (message[0] == CLIENT_REQUEST_RES) {
-                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), AppendLogCall.class);
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), AppendResult.class);
             } else if (message[0] == REDIRECT_RES) {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), RedirectRes.class);
             } else {

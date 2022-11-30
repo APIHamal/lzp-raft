@@ -25,6 +25,8 @@ public class RaftOptions {
 
     public long logFileMaxSize = 1024 * 256; // 1MB
 
+    public long writeTimeout = 1000 * 5; // 5秒超时
+
     @Override
     public String toString() {
         return "RaftOptions{" +

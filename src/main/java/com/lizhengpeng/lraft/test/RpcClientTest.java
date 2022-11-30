@@ -21,11 +21,11 @@ public class RpcClientTest {
         while (true) {
             try {
                 ClientRequestMsg msg = new ClientRequestMsg();
-                msg.setMsg("hello raft" + System.currentTimeMillis());
+                msg.setMsg("kv-cmd-" + System.currentTimeMillis());
                 System.out.println(raftClient.sendRequestSync(msg));
             } catch (Exception e) {
             }
-//            Thread.sleep(50);
+            Thread.sleep(100);
         }
 
 

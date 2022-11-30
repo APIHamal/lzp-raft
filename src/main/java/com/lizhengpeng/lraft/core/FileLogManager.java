@@ -298,13 +298,4 @@ public class FileLogManager implements LogManager {
         return lastLog;
     }
 
-    /**
-     * 获取下一个即将加入的日志索引
-     * @return
-     */
-    @Override
-    public Long getNextLogIndex() {
-        return raftMeta.getLastLogIndex() + 1;
-    }
-
 }

@@ -4,7 +4,7 @@ import cn.hutool.core.collection.CollUtil;
 import com.lizhengpeng.lraft.exception.RaftException;
 import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
-import com.lizhengpeng.lraft.response.AppendLogCall;
+import com.lizhengpeng.lraft.response.AppendResult;
 import com.lizhengpeng.lraft.response.RedirectRes;
 import com.lizhengpeng.lraft.response.RefreshLeaderRes;
 import org.slf4j.Logger;
@@ -54,7 +54,7 @@ public class RaftClient {
      * @param requestMsg
      * @return
      */
-    public synchronized AppendLogCall sendRequestSync(ClientRequestMsg requestMsg) {
+    public synchronized AppendResult sendRequestSync(ClientRequestMsg requestMsg) {
         if (leaderEndpoint == null) { // raft集群中的leader服务器的地址未知
             refreshRaftLeader(); // 重新获取一次leader的地址
             if (leaderEndpoint == null) {
@@ -73,7 +73,7 @@ public class RaftClient {
      * @param redirectCount
      * @return
      */
-    private synchronized AppendLogCall autoRedirectSendRequest(Endpoint endpoint, ClientRequestMsg clientRequestMsg, int redirectCount) {
+    private synchronized AppendResult autoRedirectSendRequest(Endpoint endpoint, ClientRequestMsg clientRequestMsg, int redirectCount) {
         if (redirectCount > MAX_REDIRECT_COUNT) { // 重定向达到阈值则直接报错处理
             leaderEndpoint = null; // 多次重定向发生了错误则清楚leader的地址
             throw new RaftException("send msg failed");
@@ -95,8 +95,8 @@ public class RaftClient {
                 leaderEndpoint = null;
                 throw new RaftException("leader endpoint un know");
             }
-        } else if (response instanceof AppendLogCall) {
-            return (AppendLogCall) response;
+        } else if (response instanceof AppendResult) {
+            return (AppendResult) response;
         } else {
             leaderEndpoint = null;
             throw new RaftException("send msg failed");
@@ -112,10 +112,10 @@ public class RaftClient {
         RefreshLeaderMsg refreshMsg = new RefreshLeaderMsg();
         for (Endpoint endpoint : endpoints) {
             RefreshLeaderRes res = (RefreshLeaderRes) sendMessageSync(endpoint, refreshMsg);
-            logger.info("refresh leader response => {}", res);
+            logger.debug("refresh leader response => {}", res);
             if (res != null && res.getRefreshed() == Boolean.TRUE) {
                 leaderEndpoint = res.getEndpoint();
-                logger.info("fetch leader endpoint => {}", leaderEndpoint);
+                logger.debug("fetch leader endpoint => {}", leaderEndpoint);
                 return leaderEndpoint;
             }
         }
@@ -151,13 +151,13 @@ public class RaftClient {
             }
             return RaftCodec.decode(RpcServer.readRpcMessage(rpcClient.getInputStream()));
         } catch (SocketTimeoutException e) {
-            logger.info("read msg from => {} timeout ", endpoint);
+            logger.debug("read msg from => {} timeout ", endpoint);
             cleanRaftClient(clientHolder);
         } catch (IOException e) {
-            logger.info("send/read message to => {} failed", endpoint);
+            logger.debug("send/read message to => {} failed", endpoint);
             cleanRaftClient(clientHolder);
         } catch (Exception e) {
-            logger.info("send/read message to => {} exception", endpoint, e);
+            logger.debug("send/read message to => {} exception", endpoint, e);
             cleanRaftClient(clientHolder);
         } finally {
             clientHolder.release();
@@ -196,9 +196,9 @@ public class RaftClient {
             stream.flush();
             return true;
         } catch (SocketTimeoutException e) {
-            logger.info("send msg to => {} timeout ", endpoint);
+            logger.debug("send msg to => {} timeout ", endpoint);
         } catch (Exception e) {
-            logger.info("send msg failed {}", endpoint, e);
+            logger.debug("send msg failed {}", endpoint, e);
         }
         return false;
     }

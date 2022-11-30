@@ -6,6 +6,6 @@ package com.lizhengpeng.lraft.core;
  */
 public interface StateMachine {
 
-    public void apply(String command);
+    public void apply(String command, Long logIndex);
 
 }
