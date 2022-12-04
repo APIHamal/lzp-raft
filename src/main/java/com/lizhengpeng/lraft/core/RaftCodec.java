@@ -4,10 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSONObject;
 import com.lizhengpeng.lraft.exception.RaftCodecException;
 import com.lizhengpeng.lraft.exception.RaftException;
-import com.lizhengpeng.lraft.request.ClientRequestMsg;
-import com.lizhengpeng.lraft.request.AppendLogMsg;
-import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
-import com.lizhengpeng.lraft.request.RequestVoteMsg;
+import com.lizhengpeng.lraft.request.*;
 import com.lizhengpeng.lraft.response.*;
 
 import java.nio.charset.StandardCharsets;
@@ -38,6 +35,10 @@ public class RaftCodec {
     private static final byte CLIENT_REQUEST_RES = 8;
 
     private static final byte REDIRECT_RES = 9;
+
+    private static final byte INSTALL_SNAPSHOT_MSG = 10;
+
+    private static final byte INSTALL_SNAPSHOT_RES = 11;
 
     /**
      * 对指定的消息编码
@@ -70,7 +71,11 @@ public class RaftCodec {
             } else if (message instanceof AppendResult) {
                 encode[HEAD_LENGTH] = CLIENT_REQUEST_RES; // 返回客户端响应
             } else if (message instanceof RedirectRes) {
-                encode[HEAD_LENGTH] = REDIRECT_RES;
+                encode[HEAD_LENGTH] = REDIRECT_RES; // 重定向leader的响应
+            } else if (message instanceof InstallSnapshotMsg) {
+                encode[HEAD_LENGTH] = INSTALL_SNAPSHOT_MSG; // 安装快照的请求
+            } else if (message instanceof InstallSnapshotRes) {
+                encode[HEAD_LENGTH] = INSTALL_SNAPSHOT_RES; // 安装快照的响应
             } else {
                 throw new RaftException("encode error un support message type");
             }
@@ -111,6 +116,10 @@ public class RaftCodec {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), AppendResult.class);
             } else if (message[0] == REDIRECT_RES) {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), RedirectRes.class);
+            } else if (message[0] == INSTALL_SNAPSHOT_MSG) {
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), InstallSnapshotMsg.class);
+            } else if (message[0] == INSTALL_SNAPSHOT_RES) {
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), InstallSnapshotRes.class);
             } else {
                 throw new RaftException("decode error un support message type");
             }

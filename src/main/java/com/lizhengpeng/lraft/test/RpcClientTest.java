@@ -25,7 +25,7 @@ public class RpcClientTest {
                 System.out.println(raftClient.sendRequestSync(msg));
             } catch (Exception e) {
             }
-            Thread.sleep(100);
+            Thread.sleep(5);
         }
 
 

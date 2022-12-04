@@ -3,17 +3,12 @@ package com.lizhengpeng.lraft.core;
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.StrUtil;
 import com.lizhengpeng.lraft.exception.RaftCodecException;
-import com.lizhengpeng.lraft.request.AppendLogMsg;
-import com.lizhengpeng.lraft.request.ClientRequestMsg;
-import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
-import com.lizhengpeng.lraft.request.RequestVoteMsg;
-import com.lizhengpeng.lraft.response.AppendLogRes;
-import com.lizhengpeng.lraft.response.AppendResult;
-import com.lizhengpeng.lraft.response.RefreshLeaderRes;
-import com.lizhengpeng.lraft.response.RequestVoteRes;
+import com.lizhengpeng.lraft.request.*;
+import com.lizhengpeng.lraft.response.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.HashSet;
 import java.util.List;
@@ -54,6 +49,8 @@ public class RaftNode implements MessageHandler {
 
     private ScheduledFuture<?> leadershipSchedule; // leader节点未收到消息时自动退化
 
+    private ScheduledFuture<?> snapshotTask;
+
     private SecureRandom secureRandom = new SecureRandom();
 
     private FileLogManager logManager;
@@ -68,6 +65,8 @@ public class RaftNode implements MessageHandler {
 
     private StateMachine stateMachine; // 状态机的定义
 
+    private Snapshot snapshot;
+
     private long lastApplied;
 
     private ConcurrentHashMap<Long, Future<Void>> waitTask = new ConcurrentHashMap<>();
@@ -79,9 +78,11 @@ public class RaftNode implements MessageHandler {
     public RaftNode(RaftOptions raftOptions, StateMachine stateMachine) {
         this.raftOptions = raftOptions;
         this.logManager = new FileLogManager(raftOptions);
+        this.snapshot = new Snapshot(raftOptions.getLogDir());
         this.raftMeta = logManager.getRaftMeta();
         this.stateMachine = stateMachine;
         rpcServer = new RpcServer(raftOptions);
+        registerSnapshotTask(); // 执行固定的创建snapshot任务
         applyStateMachine(logManager.getRaftMeta().getCommittedIndex());
     }
 
@@ -230,6 +231,30 @@ public class RaftNode implements MessageHandler {
                         logger.warn("node => {} replicate process not found", endpoint);
                         continue; // 跳过当前节点的处理
                     }
+                    // 如果当前matchIndex小于第一条索引的位置则需要进行发送快照数据
+                    if (progress.getMatchIndex() < raftMeta.getFirstLogIndex()) {
+                        // 发送快照数据
+                        InstallSnapshotMsg snapshotMsg = new InstallSnapshotMsg();
+                        snapshotMsg.setTerm(raftMeta.getCurrentTerm());
+                        snapshotMsg.setNodeId(currentId);
+                        snapshotMsg.setLastLogTerm(snapshot.readMeta().getLastLogTerm()); // 快照中对应最后一条数据的term
+                        snapshotMsg.setLastLogIndex(snapshot.readMeta().getLastLogIndex()); // 快照中对应最后一条日志的索引
+                        snapshotMsg.setOffset(progress.getSnapshotOffset()); // 从指定的索引位置开始读取数据
+                        // 从指定索引位置开始读取数据
+                        byte[] buffer = snapshot.readSnapshot(progress.getSnapshotOffset());
+                        snapshotMsg.setData(new String(buffer, StandardCharsets.UTF_8));
+                        // 如果读取到了空的数组则表示读取到了文件的末尾位置
+                        if (buffer.length == 0) {
+                            snapshotMsg.setLastPart(true);
+                        } else {
+                            snapshotMsg.setLastPart(false);
+                        }
+                        // 记录当前读取的数据的长度
+                        progress.setLastReadLength(buffer.length);
+                        rpcServer.sendMsg(endpoint, snapshotMsg); // 发送给指定的节点数据
+                        continue;
+                    }
+
                     // 获取对应的matchIndex的日志数据
                     // matchIndex与nextIndex最开始是相同的位置
                     // 其实这里只有根据复制进度查询日志只有两种情况
@@ -269,6 +294,49 @@ public class RaftNode implements MessageHandler {
             // 重复的发送数据
             registerLeaderTask();
         }, raftOptions.heartbeatInterval);
+    }
+
+    /**
+     * 注册follower节点的超时任务
+     * @return
+     */
+    public void registerSnapshotTask() {
+        // 固定时间间隔创建状态机的快照数据
+        snapshotTask = taskExecutor.replicateTask(() -> {
+            try {
+                // 当前只允许leader进行快照生成
+                if (nodeRole != RaftRole.LEADER) {
+                    return;
+                }
+                if (lastApplied <= raftMeta.getFirstLogIndex()) {
+                    return; // 未提交任何日志则直接返回
+                }
+                // 获取当前状态机提交的日志
+                LogEntry logEntry = logManager.getLogEntry(lastApplied);
+                if (logEntry == null) {
+                    return;
+                }
+                // 写入日志快照数据
+                SnapshotWriter snapshotWriter = snapshot.getSnapshotWriter();
+                stateMachine.writeSnapshot(snapshotWriter); // 状态机写入数据
+                // 创建快照的元数据
+                SnapshotMeta meta = SnapshotMeta.builder()
+                        .lastLogIndex(logEntry.getIndex())
+                        .lastLogTerm(logEntry.getTerm())
+                        .build();
+                // 写入元数据(只能在快照数据完全准备好了才可以删除原始的日志数据)
+                // 并且更新raftMeta信息否则会造成数据的丢失
+                snapshotWriter.writeSnapshotMeta(meta);
+                // todo 暂时不删除原始的日志数据后续进行删除
+                snapshotWriter.complete();
+                snapshot.reloadSnapshot(); // 重新加载snapshot数据(按照时间戳命令文件夹倒叙排列则可找到最新的快照)
+                // 更新raft的元数据信息
+                raftMeta.setFirstLogIndex(lastApplied + 1); // 更新第一条日志的索引位置
+                updateRaftMeta();
+            } catch (Exception e) {
+                logger.info("create state machine task occur exception", e);
+            }
+        }, raftOptions.snapshotInterval);
     }
 
     /**
@@ -500,6 +568,128 @@ public class RaftNode implements MessageHandler {
                 progress.incrMatchIndex(); // leader节点推进日志的复制
             } else {
                 progress.decrMatchIndex(); // leader节点开始回退操作
+                // 如果回退的进度小于第一条日志则需要发送快照
+                if (progress.getMatchIndex() < raftMeta.getFirstLogIndex()) {
+                    progress.setSnapshotOffset(0L); // 从位置0开始进行日志复制
+                }
+            }
+        });
+    }
+
+    @Override
+    public void onInstallSnapshot(NodeId nodeId, InstallSnapshotMsg installSnapshotMsg) {
+        taskExecutor.submit(() -> {
+            logger.debug("node receive install snapshot {},{}", nodeId, installSnapshotMsg);
+            if (installSnapshotMsg.getTerm() < raftMeta.getCurrentTerm()) {
+                InstallSnapshotRes response = new InstallSnapshotRes();
+                response.setTerm(raftMeta.getCurrentTerm());
+                response.setSuccess(false);
+                rpcServer.sendMsg(nodeId, response);
+                return;
+            }
+            if (installSnapshotMsg.getTerm() > raftMeta.getCurrentTerm()) {
+                raftMeta.setCurrentTerm(installSnapshotMsg.getTerm()); // 持久化meta消息
+                nodeRole = RaftRole.FOLLOWER;
+                updateRaftMeta();
+                // 重新注册follower节点的定时器
+                cancelTimeoutTask();
+                registerFollowerTimeoutTask();
+                return;
+            }
+            if (nodeRole == RaftRole.LEADER) {
+                logger.error("install snapshot raft cluster found two leader, fatal error!!!");
+                return;
+            }
+            // 收到来自leader节点的心跳消息后
+            // 需要记录当前raft集群的leaderId
+            // 然后去具体的成员表查询leader的地址
+            raftLeaderId = nodeId.getNodeId();
+            if (nodeRole == RaftRole.FOLLOWER) {
+                logger.info("receive install snapshot => {}", installSnapshotMsg);
+                InstallSnapshotRes response = new InstallSnapshotRes(); // 返回接收成功的响应
+                response.setTerm(raftMeta.getCurrentTerm());
+                response.setNodeId(currentId);
+                response.setSuccess(true);
+                // 默认直接接收数据
+                if (installSnapshotMsg.getOffset() == 0) {
+                    if (snapshot.getLocalWriter() != null) { // 首先释放资源
+                        snapshot.getLocalWriter().release();
+                    } else { // 创建一个本地快照的写入
+                        snapshot.setLocalWriter(snapshot.getSnapshotWriter());
+                    }
+                }
+                // 写入快照数据
+                // 判断是否是最后一个数据
+                if (installSnapshotMsg.getLastPart() == Boolean.TRUE) {
+                    // 写入快照持久化
+                    SnapshotMeta snapshotMeta = SnapshotMeta.builder()
+                            .lastLogIndex(installSnapshotMsg.getLastLogIndex())
+                            .lastLogTerm(installSnapshotMsg.getLastLogTerm())
+                            .build();
+                    snapshot.getLocalWriter().release();
+                    snapshot.getLocalWriter().writeSnapshotMeta(snapshotMeta);
+                    snapshot.reloadSnapshot();
+                    // 应用状态机快照数据
+                    stateMachine.readSnapshot(snapshot);
+                    lastApplied = snapshotMeta.getLastLogIndex(); // 最后应用的日志索引位置
+                    // 更新第一条索引的位置
+                    raftMeta.setFirstLogIndex(lastApplied + 1);
+                    updateRaftMeta(); // 持久化raft元数据
+                } else {
+                    // 在当前的流基础上继续进行写入
+                    snapshot.getLocalWriter().write(installSnapshotMsg.getData().getBytes(StandardCharsets.UTF_8));
+                }
+                rpcServer.sendMsg(nodeId, response);
+                // 重新设置选举定时器
+                cancelTimeoutTask();
+                registerFollowerTimeoutTask();
+            } else {
+                // candidate节点需要退化成follower节点
+                // candidate节点目前不需要返回数据
+                // 等待下次收到心跳时在follower节点时候再进行处理
+                nodeRole = RaftRole.FOLLOWER;
+                raftMeta.setCurrentTerm(installSnapshotMsg.getTerm());
+                updateRaftMeta();
+                // 重新注册follower节点的定时器
+                cancelTimeoutTask();
+                registerFollowerTimeoutTask();
+            }
+        });
+    }
+
+    @Override
+    public void onInstallSnapshotCallback(InstallSnapshotRes installSnapshotRes) {
+        taskExecutor.submit(() -> {
+            logger.debug("node receive install snapshot response {}", installSnapshotRes);
+            if (installSnapshotRes.getTerm() > raftMeta.getCurrentTerm()) {
+                // 当前的leader节点退化成follower节点并等待心跳
+                nodeRole = RaftRole.FOLLOWER;
+                raftMeta.setCurrentTerm(installSnapshotRes.getTerm());
+                updateRaftMeta();
+                // 重新注册follower节点的定时器
+                cancelTimeoutTask();
+                registerFollowerTimeoutTask();
+                return;
+            }
+            // 获取节点的复制进度表
+            // 根据节点的复制进度来推进commit的提交或者nextLogIndex的回退操作
+            ReplicateProgress progress = raftGroupTable.getReplicate(installSnapshotRes.getNodeId());
+            if (progress == null) {
+                logger.warn("append log callback get node => {} progress not found", installSnapshotRes.getNodeId());
+                return;
+            }
+            if (installSnapshotRes.getSuccess() == Boolean.TRUE) { // 快照未发送完成则继续按照当前的offset进行发送
+                // 增加复制的偏移量
+                progress.setSnapshotOffset(progress.getSnapshotOffset() + progress.getLastReadLength());
+                // 如果发送完整则正常的开始复制过程
+                if (progress.getLastReadLength() == 0) { // 正常的开始复制流程
+                    progress.setNextIndex(raftMeta.getLastLogIndex() + 1);
+                    progress.setMatchIndex(raftMeta.getLastLogIndex() + 1);
+                }
+            } else {
+                // todo 这里需要优化
+                // 如果发送失败了则重置offset
+                progress.setSnapshotOffset(0l);
             }
         });
     }

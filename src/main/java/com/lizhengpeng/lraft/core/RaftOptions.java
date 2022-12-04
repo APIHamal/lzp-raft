@@ -19,11 +19,13 @@ public class RaftOptions {
 
     public int heartbeatInterval = 50; // 心跳时间间隔
 
+    public int snapshotInterval = 60; // 心跳时间间隔(秒)
+
     public int connectTimeout = 20; // 连接超时时间
 
     public int refreshLeaderTimeout = 1000 * 10; // 刷新leader节点的超时时间
 
-    public long logFileMaxSize = 1024 * 256; // 1MB
+    public long logFileMaxSize = 1024 * 64; // 1MB
 
     public long writeTimeout = 1000 * 5; // 5秒超时
 

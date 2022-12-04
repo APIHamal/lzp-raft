@@ -2,11 +2,9 @@ package com.lizhengpeng.lraft.core;
 
 import com.lizhengpeng.lraft.exception.RaftCodecException;
 import com.lizhengpeng.lraft.exception.RaftException;
-import com.lizhengpeng.lraft.request.AppendLogMsg;
-import com.lizhengpeng.lraft.request.ClientRequestMsg;
-import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
-import com.lizhengpeng.lraft.request.RequestVoteMsg;
+import com.lizhengpeng.lraft.request.*;
 import com.lizhengpeng.lraft.response.AppendLogRes;
+import com.lizhengpeng.lraft.response.InstallSnapshotRes;
 import com.lizhengpeng.lraft.response.RequestVoteRes;
 import lombok.Setter;
 import org.slf4j.Logger;
@@ -140,6 +138,12 @@ public class RpcServer {
                     // 客户端尝试获取leader节点
                     RefreshLeaderMsg refreshLeaderMsg = (RefreshLeaderMsg) resMessage;
                     messageHandler.onRefreshLeader(refreshLeaderMsg, rpcClient);
+                } else if (resMessage instanceof InstallSnapshotMsg) { // 接收到日志快照请求
+                    InstallSnapshotMsg msg = (InstallSnapshotMsg) resMessage;
+                    messageHandler.onInstallSnapshot(NodeId.of(msg.getNodeId()), msg);
+                } else if (resMessage instanceof InstallSnapshotRes) { // 日志快照请求响应
+                    InstallSnapshotRes installSnapshotRes = (InstallSnapshotRes) resMessage;
+                    messageHandler.onInstallSnapshotCallback(installSnapshotRes);
                 }
             }
         } catch (RaftCodecException e) {

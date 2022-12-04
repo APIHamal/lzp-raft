@@ -15,10 +15,12 @@ public class ReplicateProgress {
 
     private long nextIndex;
 
+    private long snapshotOffset;
+
+    private long lastReadLength; // 记录上一次读取的snapshot长度
+
     public void decrMatchIndex() {
-        if (matchIndex > 1) {
-            matchIndex--;
-        }
+        matchIndex--;
     }
 
     public void incrMatchIndex() {

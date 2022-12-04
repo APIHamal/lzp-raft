@@ -1,10 +1,8 @@
 package com.lizhengpeng.lraft.core;
 
-import com.lizhengpeng.lraft.request.ClientRequestMsg;
-import com.lizhengpeng.lraft.request.AppendLogMsg;
-import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
-import com.lizhengpeng.lraft.request.RequestVoteMsg;
+import com.lizhengpeng.lraft.request.*;
 import com.lizhengpeng.lraft.response.AppendLogRes;
+import com.lizhengpeng.lraft.response.InstallSnapshotRes;
 import com.lizhengpeng.lraft.response.RequestVoteRes;
 
 /**
@@ -26,6 +24,19 @@ public interface MessageHandler {
      * @param appendLogRes
      */
     void onAppendLogCallback(AppendLogRes appendLogRes);
+
+    /**
+     * 节点接收到日志快照的复制请求
+     * @param nodeId
+     * @param installSnapshotMsg
+     */
+    void onInstallSnapshot(NodeId nodeId, InstallSnapshotMsg installSnapshotMsg);
+
+    /**
+     * 日志快照写入的回复请求
+     * @param installSnapshotRes
+     */
+    void onInstallSnapshotCallback(InstallSnapshotRes installSnapshotRes);
 
     /**
      * 当前节点接收到投票请求

@@ -17,7 +17,9 @@ public class RaftMeta {
 
     private long lastLogIndex; // 写入文件中的最后一条日志的索引
 
-    private long committedIndex; // 集群的提交进度(raft规定只能提交自己term内的日志这里放松了要求)
+    private long committedIndex; // 集群的提交进度(raft规定只能提交自己term内的日志)
+
+    private long firstLogIndex; // 加入了日志快照后需要裁剪日志数据
 
     @Override
     public String toString() {
