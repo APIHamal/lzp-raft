@@ -19,26 +19,22 @@ public class LogEntry {
 
     private static final Integer GENERAL_LOG = 2;
 
-    private Integer kind;
+    private int kind;
 
-    private Long term;
+    private long term;
 
-    private Long index;
+    private long index;
 
     private String entries;
-
-    private boolean logEquals(Long source, Long dest) {
-        return source != null && dest != null && source.compareTo(dest) == 0;
-    }
 
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
             return true;
         }
-        if (obj != null && obj instanceof LogEntry) {
+        if (obj != null && (obj instanceof LogEntry)) {
             LogEntry logEntry = (LogEntry) obj;
-            return logEquals(term, logEntry.getTerm()) && logEquals(index, logEntry.getIndex());
+            return term == logEntry.getTerm() && index == logEntry.getIndex();
         }
         return false;
     }

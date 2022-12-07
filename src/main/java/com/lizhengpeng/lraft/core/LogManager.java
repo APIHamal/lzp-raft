@@ -21,7 +21,7 @@ public interface LogManager {
      * @param entries
      * @return
      */
-    long appendLog(Long term, String entries);
+    long appendLog(long term, String entries);
 
     /**
      * 复制从leader发送的日志数据
@@ -30,14 +30,14 @@ public interface LogManager {
      * @param raftLog
      * @return 返回true或者false表示成功或失败来判断写入是否成功
      */
-    boolean replicateLog(Long preLogTerm, Long preLogIndex, LogEntry raftLog);
+    boolean replicateLog(long preLogTerm, long preLogIndex, LogEntry raftLog);
 
     /**
      * 根据索引获取对应的日志
      * @param index
      * @return
      */
-    LogEntry getLogEntry(Long index);
+    LogEntry getLogEntry(long index);
 
     /**
      * 获取当前的最后一条日志

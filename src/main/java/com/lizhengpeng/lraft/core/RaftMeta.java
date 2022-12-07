@@ -1,5 +1,6 @@
 package com.lizhengpeng.lraft.core;
 
+import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,6 +10,7 @@ import lombok.Setter;
  */
 @Setter
 @Getter
+@Builder
 public class RaftMeta {
 
     private long currentTerm; // 当前集群的任期
@@ -28,6 +30,7 @@ public class RaftMeta {
                 ", voteFor=" + voteFor +
                 ", lastLogIndex=" + lastLogIndex +
                 ", committedIndex=" + committedIndex +
+                ", firstLogIndex=" + firstLogIndex +
                 '}';
     }
 }

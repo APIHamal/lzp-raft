@@ -10,6 +10,10 @@ public class RaftException extends RuntimeException {
         super(msg);
     }
 
+    public RaftException(Exception e) {
+        super(e);
+    }
+
     public RaftException(String msg, Throwable throwable) {
         super(msg, throwable);
     }

@@ -36,9 +36,11 @@ public class RaftOptions {
                 ", minElectionTimeout=" + minElectionTimeout +
                 ", maxElectionTimeout=" + maxElectionTimeout +
                 ", heartbeatInterval=" + heartbeatInterval +
+                ", snapshotInterval=" + snapshotInterval +
                 ", connectTimeout=" + connectTimeout +
                 ", refreshLeaderTimeout=" + refreshLeaderTimeout +
                 ", logFileMaxSize=" + logFileMaxSize +
+                ", writeTimeout=" + writeTimeout +
                 '}';
     }
 }

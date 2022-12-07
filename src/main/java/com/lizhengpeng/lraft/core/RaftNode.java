@@ -89,8 +89,8 @@ public class RaftNode implements MessageHandler {
     /**
      * 更新元数据信息
      */
-    public void updateRaftMeta() {
-        logManager.updateRaftMeta();
+    public void updateRaftMeta(RaftMeta raftMeta) {
+        logManager.updateRaftMeta(raftMeta);
     }
 
     /**
@@ -158,7 +158,7 @@ public class RaftNode implements MessageHandler {
             voteCount = 0; // 重新设置当前获取的票数
             nodeRole = RaftRole.CANDIDATE; // 切换角色为候选者
             raftMeta.setCurrentTerm(raftMeta.getCurrentTerm() + 1); // 增加任期
-            updateRaftMeta();
+//            updateRaftMeta();
 
             // 发送投票的请求到各个节点中
             RequestVoteMsg message = new RequestVoteMsg();
@@ -191,7 +191,7 @@ public class RaftNode implements MessageHandler {
             voteCount = 0; // 重新设置当前获取的票数
             nodeRole = RaftRole.CANDIDATE; // 切换角色为候选者
             raftMeta.setCurrentTerm(raftMeta.getCurrentTerm() + 1); // 增加任期
-            updateRaftMeta();
+//            updateRaftMeta();
 
             // 发送投票的请求到各个节点中
             RequestVoteMsg message = new RequestVoteMsg();
@@ -332,7 +332,7 @@ public class RaftNode implements MessageHandler {
                 snapshot.reloadSnapshot(); // 重新加载snapshot数据(按照时间戳命令文件夹倒叙排列则可找到最新的快照)
                 // 更新raft的元数据信息
                 raftMeta.setFirstLogIndex(lastApplied + 1); // 更新第一条日志的索引位置
-                updateRaftMeta();
+//                updateRaftMeta();
             } catch (Exception e) {
                 logger.info("create state machine task occur exception", e);
             }
@@ -404,7 +404,7 @@ public class RaftNode implements MessageHandler {
             if (appendLogMsg.getTerm() > raftMeta.getCurrentTerm()) {
                 nodeRole = RaftRole.FOLLOWER;
                 raftMeta.setCurrentTerm(appendLogMsg.getTerm()); // 持久化meta消息
-                updateRaftMeta();
+//                updateRaftMeta();
                 // 重新注册follower节点的定时器
                 cancelTimeoutTask();
                 registerFollowerTimeoutTask();
@@ -421,7 +421,7 @@ public class RaftNode implements MessageHandler {
             if (nodeRole == RaftRole.FOLLOWER) {
                 // 更新当前集群中可以提交的索引
                 raftMeta.setCommittedIndex(appendLogMsg.getLastCommitted()); // 持久化committedIndex
-                updateRaftMeta();
+//                updateRaftMeta();
 
                 // 如果当前是简单的心跳消息则重置定时器即可
                 // 否则进入日志复制的流程
@@ -491,7 +491,7 @@ public class RaftNode implements MessageHandler {
                 // 等待下次收到心跳时在follower节点时候再进行处理
                 nodeRole = RaftRole.FOLLOWER;
                 raftMeta.setCurrentTerm(appendLogMsg.getTerm());
-                updateRaftMeta();
+//                updateRaftMeta();
                 // 重新注册follower节点的定时器
                 cancelTimeoutTask();
                 registerFollowerTimeoutTask();
@@ -527,7 +527,7 @@ public class RaftNode implements MessageHandler {
                 // 当前的leader节点退化成follower节点并等待心跳
                 nodeRole = RaftRole.FOLLOWER;
                 raftMeta.setCurrentTerm(appendLogRes.getTerm());
-                updateRaftMeta();
+//                updateRaftMeta();
                 // 重新注册follower节点的定时器
                 cancelTimeoutTask();
                 registerFollowerTimeoutTask();
@@ -562,7 +562,7 @@ public class RaftNode implements MessageHandler {
                         committed--;
                     }
                     raftMeta.setCommittedIndex(committed); // 持久化committedIndex
-                    updateRaftMeta();
+//                    updateRaftMeta();
                     applyStateMachine(committed); // 应用到状态机
                 }
                 progress.incrMatchIndex(); // leader节点推进日志的复制
@@ -590,7 +590,7 @@ public class RaftNode implements MessageHandler {
             if (installSnapshotMsg.getTerm() > raftMeta.getCurrentTerm()) {
                 raftMeta.setCurrentTerm(installSnapshotMsg.getTerm()); // 持久化meta消息
                 nodeRole = RaftRole.FOLLOWER;
-                updateRaftMeta();
+//                updateRaftMeta();
                 // 重新注册follower节点的定时器
                 cancelTimeoutTask();
                 registerFollowerTimeoutTask();
@@ -634,7 +634,7 @@ public class RaftNode implements MessageHandler {
                     lastApplied = snapshotMeta.getLastLogIndex(); // 最后应用的日志索引位置
                     // 更新第一条索引的位置
                     raftMeta.setFirstLogIndex(lastApplied + 1);
-                    updateRaftMeta(); // 持久化raft元数据
+//                    updateRaftMeta(); // 持久化raft元数据
                 } else {
                     // 在当前的流基础上继续进行写入
                     snapshot.getLocalWriter().write(installSnapshotMsg.getData().getBytes(StandardCharsets.UTF_8));
@@ -649,7 +649,7 @@ public class RaftNode implements MessageHandler {
                 // 等待下次收到心跳时在follower节点时候再进行处理
                 nodeRole = RaftRole.FOLLOWER;
                 raftMeta.setCurrentTerm(installSnapshotMsg.getTerm());
-                updateRaftMeta();
+//                updateRaftMeta();
                 // 重新注册follower节点的定时器
                 cancelTimeoutTask();
                 registerFollowerTimeoutTask();
@@ -665,7 +665,7 @@ public class RaftNode implements MessageHandler {
                 // 当前的leader节点退化成follower节点并等待心跳
                 nodeRole = RaftRole.FOLLOWER;
                 raftMeta.setCurrentTerm(installSnapshotRes.getTerm());
-                updateRaftMeta();
+//                updateRaftMeta();
                 // 重新注册follower节点的定时器
                 cancelTimeoutTask();
                 registerFollowerTimeoutTask();
@@ -712,12 +712,12 @@ public class RaftNode implements MessageHandler {
             if (requestVoteMsg.getTerm() > raftMeta.getCurrentTerm()) {
                 nodeRole = RaftRole.FOLLOWER;
                 raftMeta.setCurrentTerm(requestVoteMsg.getTerm());
-                updateRaftMeta();
+//                updateRaftMeta();
                 // 记录当前节点给某个任期投过票
                 // 这个属性很关键raft中要保证每个任期中
                 // 只会给节点投递一票的数据
                 raftMeta.setVoteFor(requestVoteMsg.getTerm());
-                updateRaftMeta();
+//                updateRaftMeta();
 
                 cancelTimeoutTask(); // 取消当前状态下关联的定时任务
                 registerFollowerTimeoutTask(); // 注册follower节点的定时任务
@@ -770,7 +770,7 @@ public class RaftNode implements MessageHandler {
         taskExecutor.submit(() -> {
             if (raftMeta.getCurrentTerm() < res.getTerm()) {
                 raftMeta.setCurrentTerm(res.getTerm());
-                updateRaftMeta();
+//                updateRaftMeta();
 
                 nodeRole = RaftRole.FOLLOWER;
                 cancelTimeoutTask(); // 取消当前状态下关联的定时任务

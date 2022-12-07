@@ -39,7 +39,7 @@ public class MemoryLogManager implements LogManager {
     }
 
     @Override
-    public long appendLog(Long term, String entries) {
+    public long appendLog(long term, String entries) {
         LogEntry logEntry = LogEntry.builder()
                 .term(raftNode.getCurrentTerm())
                 .index(nextLogIndex.getAndAdd(1))
@@ -55,7 +55,7 @@ public class MemoryLogManager implements LogManager {
      * @return
      */
     @Override
-    public boolean replicateLog(Long preLogTerm, Long preLogIndex, LogEntry raftLog) {
+    public boolean replicateLog(long preLogTerm, long preLogIndex, LogEntry raftLog) {
         logger.warn("receive log => {}", raftLog);
         // 设置日志所属的Index因为log的preLogIndex已经确定
         // 所以这条log自身的index也就确定了
@@ -95,8 +95,8 @@ public class MemoryLogManager implements LogManager {
      * @return
      */
     @Override
-    public LogEntry getLogEntry(Long index) {
-        if (index == null || index <= 0) {
+    public LogEntry getLogEntry(long index) {
+        if (index <= 0) {
             return null;
         }
         if (!logEntries.isEmpty()) {
