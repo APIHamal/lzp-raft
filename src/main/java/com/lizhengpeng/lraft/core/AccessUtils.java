@@ -30,7 +30,7 @@ public class AccessUtils {
      * @return
      */
     public static RandomAccessFile openRandomAccess(File file) throws FileNotFoundException {
-        return new RandomAccessFile(file, "rw");
+        return new RandomAccessFile(file, "rws");
     }
 
 }

@@ -168,7 +168,7 @@ public class FileLogManager implements LogManager {
     @Override
     public synchronized long appendLog(String entries) {
         // 获取当前的term并进行写入
-        return appendLog(raftMeta.getCurrentTerm(), entries);
+        return appendLog(reloadRaftMeta().getCurrentTerm(), entries);
     }
 
     /**
@@ -236,7 +236,7 @@ public class FileLogManager implements LogManager {
                 return false;
             }
             // 清除所有的文件数据
-            if (logIndex <= raftMeta.getFirstLogIndex()) {
+            if (logIndex <= reloadRaftMeta().getFirstLogIndex()) {
                 logTreeMap.values().forEach(item -> item.destroy());
                 logTreeMap.clear(); // 清空列表
                 // todo 这里要判断是否存在快照如果快照不存在则firstLogIndex始终都是1则lastLogIndex为0
@@ -264,11 +264,7 @@ public class FileLogManager implements LogManager {
                     }
                 }
                 // 可能删除了所有的日志
-                if (CollUtil.isEmpty(logTreeMap)) {
-                    raftMeta.setLastLogIndex(raftMeta.getFirstLogIndex() - 1); // firstLogIndex只有在涉及快照的时候才会更新否则永远都是默认值1
-                } else {
-                    raftMeta.setLastLogIndex(logTreeMap.lastEntry().getValue().getLastEntry().getIndex()); // 为当前最新的日志记录的索引
-                }
+                raftMeta.setLastLogIndex(logTreeMap.lastEntry().getValue().getLastEntry().getIndex()); // 为当前最新的日志记录的索引
             }
             updateRaftMeta(raftMeta);
             return true;
@@ -290,7 +286,7 @@ public class FileLogManager implements LogManager {
                 logger.warn("currently does not clean any logs");
                 return false;
             }
-            if (logIndex >= raftMeta.getLastLogIndex()) {
+            if (logIndex >= reloadRaftMeta().getLastLogIndex()) {
                 logTreeMap.values().forEach(item -> item.destroy());
                 logTreeMap.clear(); // 清空列表
                 // todo 这里要判断是否存在快照如果快照不存在则firstLogIndex始终都是1则lastLogIndex为0
@@ -318,13 +314,7 @@ public class FileLogManager implements LogManager {
                     }
                 }
                 // 可能删除了所有的日志
-                if (CollUtil.isEmpty(logTreeMap)) {
-                    // todo 这里要判断是否存在快照如果快照不存在则firstLogIndex始终都是1则lastLogIndex为0
-                    // firstLogIndex只有在涉及快照的时候才会更新否则永远都是默认值1
-                    raftMeta.setFirstLogIndex(1l);
-                } else {
-                    raftMeta.setFirstLogIndex(logTreeMap.firstEntry().getValue().getFirstIndex()); // 为当前最新的日志记录的索引
-                }
+                raftMeta.setFirstLogIndex(logTreeMap.firstEntry().getValue().getFirstIndex()); // 为当前最新的日志记录的索引
             }
             updateRaftMeta(raftMeta);
             return true;

@@ -11,7 +11,8 @@ public class FileLogTest {
     private static final Logger logger = LoggerFactory.getLogger(FileLogTest.class);
 
     public static void main(String[] args) {
-        testReplicateLog();
+//        testReplicateLog();
+        testAppendLog();
     }
 
     /**
@@ -47,7 +48,7 @@ public class FileLogTest {
     /**
      * 测试日志写入
      */
-    public void testAppendLog() {
+    public static void testAppendLog() {
         RaftOptions raftOptions = new RaftOptions();
         raftOptions.setLogDir("C:\\raft_dir");
         FileLogManager logManager = new FileLogManager(raftOptions);
