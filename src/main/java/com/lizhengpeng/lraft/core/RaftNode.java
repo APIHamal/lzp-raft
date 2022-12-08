@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -132,7 +133,7 @@ public class RaftNode implements MessageHandler {
      * @return
      */
     public int randomTimeOut() {
-        return raftOptions.minElectionTimeout + secureRandom.nextInt(raftOptions.maxElectionTimeout - raftOptions.minElectionTimeout);
+        return raftOptions.getMinElectionTimeout() + secureRandom.nextInt(raftOptions.getMaxElectionTimeout() - raftOptions.getMinElectionTimeout());
     }
 
     /**
@@ -364,7 +365,7 @@ public class RaftNode implements MessageHandler {
             } catch (Exception e) {
                 logger.error("leader down check task exception", e);
             }
-        }, raftOptions.heartbeatInterval * 10); // 10个心跳周期内未收到heartbeat心跳回复则退化成follower
+        }, raftOptions.getHeartbeatInterval() * 10); // 10个心跳周期内未收到heartbeat心跳回复则退化成follower
     }
 
     /**
@@ -448,7 +449,7 @@ public class RaftNode implements MessageHandler {
             }
             // 重复的发送数据
             registerReplicateLogTask();
-        }, raftOptions.heartbeatInterval);
+        }, raftOptions.getHeartbeatInterval());
     }
 
     @Override
@@ -588,6 +589,8 @@ public class RaftNode implements MessageHandler {
         taskExecutor.submit(() -> {
             try {
                 logger.debug("node receive append log callback {}", appendLogRes);
+                // 首先获取锁对象这里获取锁对象主要是为了唤醒等待写入成功响应的客户端线程
+                appendLogLock.lock();
                 // 如果当前不是leader节点则直接忽略
                 // 情况同节点接收到投票反阔响应的时候相同
                 if (nodeRole != RaftRole.LEADER) {
@@ -654,8 +657,13 @@ public class RaftNode implements MessageHandler {
 //                        progress.setSnapshotOffset(0L); // 从位置0开始进行日志复制
 //                    }
                 }
+                // 唤醒正在等待写入成功响应的客户端线程
+                // 唤醒队列
+                appendLogCondition.signalAll();
             } catch (Exception e) {
                 logger.error("append log callback exception", e);
+            } finally {
+                appendLogLock.unlock();
             }
         });
     }
@@ -795,14 +803,45 @@ public class RaftNode implements MessageHandler {
      */
     public AppendResult appendLogToLeader(ClientRequestMsg clientRequestMsg) {
         AppendResult result = new AppendResult();
-        result.setStatus(Boolean.TRUE);
-        taskExecutor.submit(() -> {
+        result.setStatus(Boolean.FALSE);
+        result.setReason("append log failed");
+        try {
+            // 客户端写入数据的时候需要获取锁当日志被复制到
+            // 大多数的节点时返回成功的数据
+            appendLogLock.lock();
             if (nodeRole != RaftRole.LEADER) {
                 result.setReason("current node not leader");
             } else {
-                logManager.appendLog(clientRequestMsg.getMsg());
+                // 写入相关数据到raft集群
+                // 返回该日志条目的索引如果被提交到大部分的节点则committedIndex会大于当前的appendedIndex
+                long appendedIndex = logManager.appendLog(clientRequestMsg.getMsg());
+                long endTime = System.currentTimeMillis() + raftOptions.getWriteTimeout();
+                while (System.currentTimeMillis() < endTime) {
+                    try {
+                        long duration = endTime - System.currentTimeMillis();
+                        if (duration <= 0) { // 到达指定的时间后退出
+                            break;
+                        }
+                        appendLogCondition.await(duration, TimeUnit.MILLISECONDS);
+                        // 判断达到指定的索引位置
+                        if (reloadRaftMeta().getCommittedIndex() >= appendedIndex) {
+                            result.setStatus(Boolean.TRUE);
+                            break;
+                        }
+                    } catch (Exception e) {
+                        // Ignore exception
+                    }
+                }
+                // 判断达到指定的索引位置
+                if (reloadRaftMeta().getCommittedIndex() >= appendedIndex) {
+                    result.setStatus(Boolean.TRUE);
+                }
             }
-        });
+        } catch (Exception e) {
+            logger.info("append log failed");
+        } finally {
+            appendLogLock.unlock();
+        }
         return result;
     }
 
