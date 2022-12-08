@@ -384,7 +384,7 @@ public class FileLogManager implements LogManager {
      * @return
      */
     @Override
-    public LogEntry getLogEntry(long index) {
+    public synchronized LogEntry getLogEntry(long index) {
         if (logTreeMap.isEmpty()) {
             return null;
         }

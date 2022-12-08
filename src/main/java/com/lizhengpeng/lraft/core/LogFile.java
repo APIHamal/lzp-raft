@@ -56,7 +56,7 @@ public class LogFile {
      * 加载当前的日志文件
      * 并做好内存映射
      */
-    public synchronized void reloadLogFile(){
+    public void reloadLogFile(){
         try {
             File logFile = new File(logDir, logFileName);
             if (!logFile.exists() || !logFile.isFile() || !logFile.canRead() || !logFile.canWrite()) {
@@ -166,7 +166,7 @@ public class LogFile {
     /**
      * 销毁当前的文件和数据
      */
-    public synchronized void destroy() {
+    public void destroy() {
         try {
             AccessUtils.closeAccessFile(accessFile); // 关闭文件流对象
             File logFile = new File(logDir, logFileName);
@@ -184,7 +184,7 @@ public class LogFile {
      * 添加日志条目到列表中
      * @param logEntry
      */
-    public synchronized void appendLogEntry(LogEntry logEntry){
+    public void appendLogEntry(LogEntry logEntry){
         try {
             appendPreCheck(logEntry); // 写入的前置检查
             byte[] buffer = RaftUtils.writeObj(logEntry);
@@ -245,7 +245,7 @@ public class LogFile {
      * @param index
      * @throws IOException
      */
-    public synchronized boolean deleteSuffix(long index) {
+    public boolean deleteSuffix(long index) {
         try {
             preOperateCheck();
             // 如果删除的索引是第一条或者之前的位置
@@ -284,7 +284,7 @@ public class LogFile {
      * 从日志的开始日志一直删除到指定的索引
      * @param index
      */
-    public synchronized boolean removePrefix(long index) {
+    public boolean removePrefix(long index) {
         try {
             preOperateCheck();
             if (index < firstIndex) {
