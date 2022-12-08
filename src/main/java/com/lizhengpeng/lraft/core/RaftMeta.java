@@ -15,7 +15,7 @@ public class RaftMeta {
 
     private long currentTerm; // 当前集群的任期
 
-    private long voteFor; // 当前节点给哪个节点进行过投票
+    private String voteFor; // 当前节点给哪个节点进行过投票
 
     private long lastLogIndex; // 写入文件中的最后一条日志的索引
 

@@ -20,7 +20,9 @@ public class ReplicateProgress {
     private long lastReadLength; // 记录上一次读取的snapshot长度
 
     public void decrMatchIndex() {
-        matchIndex--;
+        if (matchIndex > 0) {
+            matchIndex--;
+        }
     }
 
     public void incrMatchIndex() {

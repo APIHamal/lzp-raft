@@ -144,15 +144,12 @@ public class RaftGroupTable {
      * @param replicateIndex
      * @return
      */
-    public boolean replicateGreatHalf(Long replicateIndex) {
-        if (replicateIndex == null) {
-            return false;
-        }
+    public boolean replicateGreatHalf(long replicateIndex) {
         List<ReplicateProgress> progressList = replicateProgress.values()
                 .stream()
                 .filter(item -> item.getMatchIndex() >= replicateIndex)
                 .collect(Collectors.toList());
-        return progressList.size() >= getHalfCount(); // 大于过半的集群节点
+        return progressList.size() + 1 >= getHalfCount(); // +1是因为包含当前的leader节点raftGroupTable中更新复制进度是除了当前leader节点
     }
 
 }

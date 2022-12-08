@@ -401,7 +401,7 @@ public class FileLogManager implements LogManager {
      */
     @Override
     public LogEntry getLastLog() {
-        LogEntry lastLog = this.getLogEntry(raftMeta.getLastLogIndex());
+        LogEntry lastLog = this.getLogEntry(reloadRaftMeta().getLastLogIndex());
         if (lastLog == null) {
             lastLog = LogEntry.builder()
                     .term(0L)
