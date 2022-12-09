@@ -15,6 +15,8 @@ public class RpcClient {
 
     private static final Logger logger = LoggerFactory.getLogger(RpcClient.class);
 
+    public static final RpcClient NO_OP = new RpcClient(null);
+
     /**
      * 对端通信的实际socket对象
      */
@@ -33,6 +35,9 @@ public class RpcClient {
      * @param msg
      */
     public void sendMessage(Object msg) {
+        if (rpcClient == null) { // 空的对象实际不做任何的操作
+            return;
+        }
        try {
            if (rpcClient.isClosed()) {
                logger.info("rpc client => {} is closed", this);

@@ -3,6 +3,7 @@ package com.lizhengpeng.lraft.test;
 import com.lizhengpeng.lraft.core.Endpoint;
 import com.lizhengpeng.lraft.core.RaftNode;
 import com.lizhengpeng.lraft.core.RaftOptions;
+import com.lizhengpeng.lraft.sample.kv.KvStoreStateMachine;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +21,7 @@ public class lRaftTest8080 {
         RaftOptions raftOptions = new RaftOptions();
         raftOptions.setLogDir("C:\\raft_dir\\8080");
         new Thread(() -> {
-            RaftNode raftNode = new RaftNode(raftOptions, SimplePrintStateMachine.INSTANCE);
+            RaftNode raftNode = new RaftNode(raftOptions, new KvStoreStateMachine());
             raftNode.addGroupMember(endpoints);
             raftNode.startRaftServer(endpoint8080);
         }).start();

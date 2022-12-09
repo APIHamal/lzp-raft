@@ -215,4 +215,16 @@ public class RaftClient {
         return false;
     }
 
+    /**
+     * 清理资源
+     * 释放连接到远程的socket对象
+     */
+    public void shutdown() {
+        rpcClientHolder.values().forEach(holder -> {
+            if (holder != null) {
+                cleanRaftClient(holder);
+            }
+        });
+    }
+
 }

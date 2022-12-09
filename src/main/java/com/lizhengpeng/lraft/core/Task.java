@@ -49,6 +49,17 @@ public class Task {
     }
 
     /**
+     * 返回持有的rpc客户端对象
+     * @return
+     */
+    public RpcClient getRpcClient() {
+        if (rpcClient != null) {
+            return rpcClient;
+        }
+        return RpcClient.NO_OP;
+    }
+
+    /**
      * 生成一个新的任务并且携带数据
      * @param data
      * @return
