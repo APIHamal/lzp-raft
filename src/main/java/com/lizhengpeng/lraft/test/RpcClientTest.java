@@ -2,7 +2,7 @@ package com.lizhengpeng.lraft.test;
 
 import com.lizhengpeng.lraft.core.Endpoint;
 import com.lizhengpeng.lraft.core.RaftClient;
-import com.lizhengpeng.lraft.request.ClientRequestMsg;
+import com.lizhengpeng.lraft.core.Task;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,18 +18,8 @@ public class RpcClientTest {
         endpoints.add(endpoint8081);
         endpoints.add(endpoint8082);
         raftClient.addEndpoints(endpoints);
-        while (true) {
-            try {
-                ClientRequestMsg msg = new ClientRequestMsg();
-                msg.setMsg("kv-cmd-" + System.currentTimeMillis());
-                System.out.println(raftClient.sendRequestSync(msg));
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            Thread.sleep(5);
-        }
-
-
+        Task task = Task.payload("kv-cmd-" + System.currentTimeMillis());
+        System.out.println(raftClient.submitSync(task));
 
     }
 }

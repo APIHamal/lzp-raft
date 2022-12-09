@@ -7,22 +7,10 @@ package com.lizhengpeng.lraft.core;
 public interface StateMachine {
 
     /**
-     * 状态机应用命令
-     * @param command
+     * 状态机提交任务
+     * @param task
      * @param logIndex
      */
-    void apply(String command, Long logIndex);
-
-    /**
-     * 生成日志快照
-     * @param snapshotWriter
-     */
-    void writeSnapshot(SnapshotWriter snapshotWriter);
-
-    /**
-     * 读取日志快照
-     * @param snapshot
-     */
-    void readSnapshot(Snapshot snapshot);
+    void apply(Task task, Long logIndex);
 
 }

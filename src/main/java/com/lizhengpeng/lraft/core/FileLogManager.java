@@ -162,27 +162,28 @@ public class FileLogManager implements LogManager {
 
     /**
      * leader节点直接写入数据到日志中
-     * @param entries
+     * @param task
      * @return
      */
     @Override
-    public synchronized long appendLog(String entries) {
+    public synchronized long appendLog(Task task) {
         // 获取当前的term并进行写入
-        return appendLog(reloadRaftMeta().getCurrentTerm(), entries);
+        return appendLog(reloadRaftMeta().getCurrentTerm(), task);
     }
 
     /**
      * leader节点直接写入数据到日志中
-     * @param entries
+     * @param term
+     * @param task
      * @return
      */
     @Override
-    public synchronized long appendLog(long term, String entries) {
+    public synchronized long appendLog(long term, Task task) {
         long logIndex = raftMeta.getLastLogIndex() + 1; // lastLogIndex默认为0从0开始增加但是raft中日志索引从1开始
         LogEntry logEntry = LogEntry.builder()
                 .term(term)
                 .index(logIndex)
-                .entries(entries)
+                .task(task)
                 .build();
         try {
             boolean createNew = false;
@@ -346,7 +347,7 @@ public class FileLogManager implements LogManager {
             if (preLogTerm == 0 && preLogIndex == 0) {
                 // 整个集群的第一条日志数据应该直接添加
                 cleanSuffix(0l);
-                appendLog(raftLog.getTerm(), raftLog.getEntries());
+                appendLog(raftLog.getTerm(), raftLog.getTask());
             } else {
                 // 判断日志是否匹配如果不匹配则需要进行回退
                 LogEntry logEntry = getLogEntry(preLogIndex);
@@ -360,7 +361,7 @@ public class FileLogManager implements LogManager {
                         logger.warn("replicate log occur conflict log index => {} expect next log index", raftLog.getIndex(), raftMeta.getLastLogIndex() + 1);
                         throw new RaftException("replicate log occur conflict log index mismatching next log index");
                     }
-                    appendLog(raftLog.getTerm(), raftLog.getEntries()); // 追加到日志文件
+                    appendLog(raftLog.getTerm(), raftLog.getTask()); // 追加到日志文件
                 }
             }
             return true;

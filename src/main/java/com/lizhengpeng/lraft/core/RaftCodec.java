@@ -40,6 +40,10 @@ public class RaftCodec {
 
     private static final byte INSTALL_SNAPSHOT_RES = 11;
 
+    private static final byte TASK_MSG = 12;
+
+    private static final byte STATUS = 13;
+
     /**
      * 对指定的消息编码
      * @param message
@@ -76,6 +80,10 @@ public class RaftCodec {
                 encode[HEAD_LENGTH] = INSTALL_SNAPSHOT_MSG; // 安装快照的请求
             } else if (message instanceof InstallSnapshotRes) {
                 encode[HEAD_LENGTH] = INSTALL_SNAPSHOT_RES; // 安装快照的响应
+            } else if (message instanceof Task) {
+                encode[HEAD_LENGTH] = TASK_MSG; // 安装快照的响应
+            } else if (message instanceof Status) {
+                encode[HEAD_LENGTH] = STATUS; // 安装快照的响应
             } else {
                 throw new RaftException("encode error un support message type");
             }
@@ -120,6 +128,10 @@ public class RaftCodec {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), InstallSnapshotMsg.class);
             } else if (message[0] == INSTALL_SNAPSHOT_RES) {
                 return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), InstallSnapshotRes.class);
+            } else if (message[0] == TASK_MSG) {
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), Task.class);
+            } else if (message[0] == STATUS) {
+                return JSONObject.parseObject(new String(buffer, StandardCharsets.UTF_8), Status.class);
             } else {
                 throw new RaftException("decode error un support message type");
             }

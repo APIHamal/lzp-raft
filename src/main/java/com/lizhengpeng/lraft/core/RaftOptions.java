@@ -29,6 +29,8 @@ public class RaftOptions {
 
     private long writeTimeout = 1000 * 5; // 5秒超时
 
+    private int cleanTaskInterval = 100; // 清理任务的执行时间
+
     @Override
     public String toString() {
         return "RaftOptions{" +

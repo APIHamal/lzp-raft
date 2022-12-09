@@ -1,9 +1,7 @@
 package com.lizhengpeng.lraft.core;
 
 import cn.hutool.core.collection.CollUtil;
-import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
-import com.lizhengpeng.lraft.response.AppendResult;
 import com.lizhengpeng.lraft.response.RefreshLeaderRes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +27,7 @@ public class RaftClient {
 
     private int CONNECT_TIME_OUT = 300; // 连接超时时间
 
-    private int READ_TIME_OUT = 5000; // 读超时时间
+    private int READ_TIME_OUT = 1000 * 10; // 读超时时间
 
     private List<Endpoint> endpoints = new ArrayList<>();
 
@@ -64,69 +62,56 @@ public class RaftClient {
     }
 
     /**
-     * 发送请求到raft集群
-     * @param requestMsg
+     * 提交任务到raft集群中执行
+     * @param task
      * @return
      */
-    public synchronized AppendResult sendRequestSync(ClientRequestMsg requestMsg) {
-        AppendResult result = new AppendResult();
-        result.setStatus(Boolean.FALSE);
-        result.setReason("send msg failed");
+    public synchronized Status submitSync(Task task) {
+        Status status = Status.failed("submit task failed");
         try {
             if (leaderEndpoint == null) { // raft集群中的leader服务器的地址未知
                 refreshRaftLeader(); // 重新获取一次leader的地址
                 if (leaderEndpoint == null) {
                     // 如果仍然没有获取到数据说明当前raft集群没有leader
                     // 避免时间浪费直接返回错误
-                    result.setStatus(Boolean.FALSE);
-                    result.setReason("there is currently no leader, please try again later");
-                    return result;
+                    status.setReason("there is currently no leader, please try again later");
+                    return status;
                 }
             }
-            return autoRedirectSendRequest(leaderEndpoint, requestMsg, 0);
+            return autoRedirectSendRequest(leaderEndpoint, task, 0);
         } catch (Exception e) {
             logger.debug("send msg failed", e);
         }
-        return result;
+        return status;
     }
 
     /**
      * 发送请求时如果遇到leadership则自动重定向到正确的服务器
      * @param endpoint
-     * @param clientRequestMsg
+     * @param task
      * @param redirectCount
      * @return
      */
-    private synchronized AppendResult autoRedirectSendRequest(Endpoint endpoint, ClientRequestMsg clientRequestMsg, int redirectCount) {
+    private synchronized Status autoRedirectSendRequest(Endpoint endpoint, Task task, int redirectCount) {
         if (redirectCount > MAX_REDIRECT_COUNT) { // 重定向达到阈值则直接报错处理
             leaderEndpoint = null; // 多次重定向发生了错误则清楚leader的地址
-            AppendResult result = new AppendResult();
-            result.setStatus(Boolean.FALSE);
-            result.setReason("send msg failed, maximum number of retries redirect");
-            return result;
+            return Status.failed("send msg failed, maximum number of retries redirect");
         }
-        Object response = sendMessageSync(endpoint, clientRequestMsg);
-        if (response != null && (response instanceof AppendResult)) { // 首次发送失败可能是raft发生了leadership
-            AppendResult appendResult = (AppendResult) response;
-            if (appendResult.getStatus() == Boolean.TRUE) { // 命令写入raft成功直接返回即可
-                return appendResult;
-            } else if (appendResult.getRedirect() == Boolean.TRUE) { // 表示发生了leadership需要重新获取leader的地址
+        Object response = sendMessageSync(endpoint, task);
+        if (response != null && (response instanceof Status)) { // 首次发送失败可能是raft发生了leadership
+            Status status = (Status) response;
+            if (status.onRedirect()) { // 表示发生了leadership需要重新获取leader的地址
                 refreshRaftLeader();
                 if (leaderEndpoint == null) { // 或者leader发生了宕机
-                    appendResult.setStatus(Boolean.FALSE);
-                    appendResult.setReason("there is currently no leader, please try again later");
-                    return appendResult;
+                    return Status.failed("there is currently no leader, please try again later");
                 }
-                return autoRedirectSendRequest(leaderEndpoint, clientRequestMsg, ++redirectCount);
-            } else { // 失败了直接返回原因
-                return appendResult;
+                return autoRedirectSendRequest(leaderEndpoint, task, ++redirectCount);
+            } else { // 写入成功或者失败直接返回
+                return status;
             }
         } else {
             leaderEndpoint = null;
-            AppendResult result = new AppendResult();
-            result.setStatus(Boolean.FALSE);
-            result.setReason("send msg failed, please try again later");
-            return result;
+            return Status.failed("send msg failed, please try again later");
         }
     }
 

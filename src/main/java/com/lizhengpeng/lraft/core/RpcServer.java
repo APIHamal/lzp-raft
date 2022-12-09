@@ -144,6 +144,9 @@ public class RpcServer {
                 } else if (resMessage instanceof InstallSnapshotRes) { // 日志快照请求响应
                     InstallSnapshotRes installSnapshotRes = (InstallSnapshotRes) resMessage;
                     messageHandler.onInstallSnapshotCallback(installSnapshotRes);
+                } else if (resMessage instanceof Task) { // 接收到客户端提交的任务
+                    Task task = (Task) resMessage;
+                    messageHandler.onSubmitTask(task, rpcClient);
                 }
             }
         } catch (RaftCodecException e) {

@@ -25,7 +25,7 @@ public class LogEntry {
 
     private long index;
 
-    private String entries;
+    private Task task;
 
     @Override
     public boolean equals(Object obj) {
@@ -50,7 +50,7 @@ public class LogEntry {
                 "kind=" + kind +
                 ", term=" + term +
                 ", index=" + index +
-                ", entries='" + entries + '\'' +
+                ", task=" + task +
                 '}';
     }
 }

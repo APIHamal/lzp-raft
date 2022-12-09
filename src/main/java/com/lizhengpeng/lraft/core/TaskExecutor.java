@@ -12,6 +12,8 @@ public class TaskExecutor {
 
     private static final ScheduledExecutorService replicateExecutor = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "task schedule thread"));
 
+    private static final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(8, 16, 60, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1024));
+
     public Future<?> submit(Runnable runnable) {
         return taskExecutor.submit(runnable);
     }
@@ -26,6 +28,10 @@ public class TaskExecutor {
 
     public ScheduledFuture<?> replicateTask(Runnable runnable, int timeOut) { // 重复的任务
         return replicateExecutor.scheduleWithFixedDelay(runnable, timeOut, timeOut, TimeUnit.SECONDS);
+    }
+
+    public void async(Runnable runnable) {
+        threadPoolExecutor.submit(runnable);
     }
 
 }

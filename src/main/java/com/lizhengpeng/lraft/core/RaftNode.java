@@ -1,5 +1,6 @@
 package com.lizhengpeng.lraft.core;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.StrUtil;
 import com.lizhengpeng.lraft.exception.RaftCodecException;
@@ -15,11 +16,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * raft核心算法的实现
@@ -47,6 +45,8 @@ public class RaftNode implements MessageHandler {
 
     private ScheduledFuture<?> leaderDownSchedule; // leader节点一定时间内未收到follower节点的回复则可能follower宕机或者网络出现异常
 
+    private ScheduledFuture<?> cleanTaskSchedule; // leader节点一定时间内未收到follower节点的回复则可能follower宕机或者网络出现异常
+
     private ScheduledFuture<?> snapshotTask;
 
     private SecureRandom secureRandom = new SecureRandom();
@@ -67,9 +67,7 @@ public class RaftNode implements MessageHandler {
 
     private volatile long lastApplied; // 状态机应用的最后一条日志的索引
 
-    private Lock appendLogLock = new ReentrantLock();
-
-    private Condition appendLogCondition = appendLogLock.newCondition();
+    private ConcurrentHashMap<TaskHolder, RpcClient> taskPool = new ConcurrentHashMap<>();
 
 
     /**
@@ -163,6 +161,7 @@ public class RaftNode implements MessageHandler {
      */
     public void registerFollowerTimeoutTask() {
         nodeRole = RaftRole.FOLLOWER; // 切换角色为候选者
+        cleanTimeoutTask(true); // 可能是从leader角色切换到了follower角色需要通知客户端写入失败
         registerElectionTimeoutTask(); // follower节点超时后会变成candidate并发起投票
     }
 
@@ -327,16 +326,48 @@ public class RaftNode implements MessageHandler {
                         raftLeaderId = currentId; // 当前节点成功竞选
 
                         // 写入一条NoOp的日志用来快速提交整个集群的日志
-                        logManager.appendLog("LEADER_ELECTION_NOOP");
+                        logManager.appendLog(Task.payload("LEADER_ELECTION_NOOP"));
                         raftGroupTable.initReplicateProgress(reloadRaftMeta().getLastLogIndex() + 1); // 初始化节点的复制进度表(始终指向leader最后一条日志的下一个位置)
 
                         cancelTimeoutTask(); // 取消所有的定时任务
                         registerReplicateLogTask(); // 注册leader节点的心跳任务
                         registerLeaderDownSchedule(); // 注册leadership超时任务
+                        registerCleanSchedule(); // 执行客户端清理任务
                     }
                 }
             } catch (Exception e) {
                 logger.error("request vote response handler exception", e);
+            }
+        });
+    }
+
+    /**
+     * 清除所有已经超时的任务
+     * 主节点接收到follower提交任务时
+     * 在任务执行期间可能发生leadership或者集群写入超时
+     */
+    private void cleanTimeoutTask(boolean forceClean) {
+        // 不需要在raft主线程中执行
+        // async方法执行在另外一组线程池中
+        taskExecutor.async(() -> {
+            // 异步清理执行超时的客户端
+            if (CollUtil.isNotEmpty(taskPool.keySet())) {
+                taskPool.keySet().forEach(taskHolder -> {
+                    // 当从leader切换到follower的时候需要强制清理数据
+                    // 或者当前仍然是leader但是写入超时了也需要通知
+                    if (forceClean || taskHolder.getStartTime() + raftOptions.getWriteTimeout() <= System.currentTimeMillis()) {
+                        RpcClient rpcClient = taskPool.remove(taskHolder);
+                        if (rpcClient != null) {
+                            if (nodeRole == RaftRole.LEADER) { // 如果当前是leader则代表写入超时了
+                                rpcClient.sendMessage(Status.failed("submit task timeout, please try again later"));
+                            } else if (nodeRole != RaftRole.LEADER && StrUtil.isNotBlank(raftLeaderId)) { // 如果当前不是leader节点则可能发生了leadership通知客户端重定向
+                                rpcClient.sendMessage(Status.redirect());
+                            } else { // 集群中可能没有主节点则发生超时
+                                rpcClient.sendMessage(Status.failed("there is currently no leader, please try again later"));
+                            }
+                        }
+                    }
+                });
             }
         });
     }
@@ -376,6 +407,27 @@ public class RaftNode implements MessageHandler {
                 logger.error("leader down check task exception", e);
             }
         }, raftOptions.getHeartbeatInterval() * 10); // 10个心跳周期内未收到heartbeat心跳回复则退化成follower
+    }
+
+    /**
+     * 注册follower节点的超时任务
+     * @return
+     */
+    public void registerCleanSchedule() {
+        // 注意这里将异步的调用转为了同步的调用
+        cleanTaskSchedule = taskExecutor.submit(() -> {
+            try {
+                // 当前不是leader则不需要执行
+                if (nodeRole != RaftRole.LEADER) {
+                    logger.warn("current node role => {} cancel clean task execute", nodeRole);
+                    return;
+                }
+                cleanTimeoutTask(false); // 执行任务
+                registerCleanSchedule(); // 重新注册任务
+            } catch (Exception e) {
+                logger.error("clean task exception", e);
+            }
+        }, raftOptions.getCleanTaskInterval()); // 10个心跳周期内未收到heartbeat心跳回复则退化成follower
     }
 
     /**
@@ -595,7 +647,12 @@ public class RaftNode implements MessageHandler {
                 logger.warn("apply index => {} failed, because log is empty", index);
                 continue;
             }
-            stateMachine.apply(logEntry.getEntries(), index); // 传入状态机数据和对应的索引
+            // 如果当前是主节点则任务获取任务池里面的任务
+            // 因为在主节点中任务可以有关联的回调函数
+            Task task = logEntry.getTask();
+            TaskHolder holder = TaskHolder.holder(task.getUuid());
+            task.bind(taskPool.remove(holder)); // 移除相关的rpc对象
+            stateMachine.apply(task, index); // 传入状态机数据和对应的索引
         }
         // raft启动的时候会使用日志来初始化整个状态机
         // lastApplied随着应用到的日志索引增长
@@ -607,9 +664,6 @@ public class RaftNode implements MessageHandler {
         taskExecutor.submit(() -> {
             try {
                 logger.debug("node receive append log response => {}", appendLogRes);
-                // 首先获取锁对象这里获取锁对象主要是为了唤醒等待写入成功响应的客户端线程
-                // 客户端写入后应该在日志被复制到大部分节点的时候返回写入成功或者写入超时返回失败
-                appendLogLock.lock();
                 // 如果当前不是leader节点则直接忽略
                 // 情况同节点接收到投票反阔响应的时候相同
                 if (nodeRole != RaftRole.LEADER) {
@@ -703,13 +757,8 @@ public class RaftNode implements MessageHandler {
 //                        progress.setSnapshotOffset(0L); // 从位置0开始进行日志复制
 //                    }
                 }
-                // 唤醒正在等待写入成功响应的客户端线程
-                // 唤醒队列
-                appendLogCondition.signalAll();
             } catch (Exception e) {
                 logger.error("append log callback exception", e);
-            } finally {
-                appendLogLock.unlock();
             }
         });
     }
@@ -768,7 +817,7 @@ public class RaftNode implements MessageHandler {
                     snapshot.getLocalWriter().writeSnapshotMeta(snapshotMeta);
                     snapshot.reloadSnapshot();
                     // 应用状态机快照数据
-                    stateMachine.readSnapshot(snapshot);
+//                    stateMachine.readSnapshot(snapshot);
                     lastApplied = snapshotMeta.getLastLogIndex(); // 最后应用的日志索引位置
                     // 更新第一条索引的位置
                     raftMeta.setFirstLogIndex(lastApplied + 1);
@@ -848,55 +897,50 @@ public class RaftNode implements MessageHandler {
      * @return
      */
     public AppendResult appendLog(ClientRequestMsg clientRequestMsg) {
-        AppendResult result = new AppendResult();
-        result.setStatus(Boolean.FALSE);
-        result.setReason("append log failed, please try again later");
-        try {
-            // 客户端写入数据的时候需要获取锁当日志被复制到
-            // 大多数的节点时返回成功的数据
-            appendLogLock.lock();
-            if (nodeRole != RaftRole.LEADER && StrUtil.isNotBlank(raftLeaderId)) { // 当前集群存在leader节点但是当前节点不是leader
-                result.setStatus(Boolean.FALSE); // 命令写入失败
-                result.setRedirect(Boolean.TRUE);
-                result.setReason("current node not leader");
-            } else if (nodeRole != RaftRole.LEADER && StrUtil.isBlank(raftLeaderId)) { // 当前集群不存在leader节点
-                result.setStatus(Boolean.FALSE);
-                result.setReason("there is currently no leader, please try again later");
-            } else {
-                // 写入相关数据到raft集群并返回该日志条目的索引
-                // 如果被提交到大部分的节点则committedIndex会大于当前的appendedIndex
-                long appendedIndex = logManager.appendLog(clientRequestMsg.getMsg());
-                // 等待指定的时间判断提交的日志索引是否超过当前写入的索引位置
-                long endTime = System.currentTimeMillis() + raftOptions.getWriteTimeout();
-                while (System.currentTimeMillis() < endTime) {
-                    try {
-                        long duration = endTime - System.currentTimeMillis();
-                        if (duration <= 0) { // 到达指定的时间后退出
-                            break;
-                        }
-                        appendLogCondition.await(duration, TimeUnit.MILLISECONDS);
-                        // 判断达到指定的索引位置
-                        if (reloadRaftMeta().getCommittedIndex() >= appendedIndex) {
-                            result.setStatus(Boolean.TRUE);
-                            result.setReason("append log success");
-                            return result;
-                        }
-                    } catch (Exception e) {
-                        // Ignore exception
-                    }
-                }
-                // 判断达到指定的索引位置
-                if (reloadRaftMeta().getCommittedIndex() >= appendedIndex) {
-                    result.setStatus(Boolean.TRUE);
-                    result.setReason("append log success");
-                }
-            }
-        } catch (Exception e) {
-            logger.info("append log failed");
-        } finally {
-            appendLogLock.unlock();
-        }
-        return result;
+//        AppendResult result = new AppendResult();
+//        result.setStatus(Boolean.FALSE);
+//        result.setReason("append log failed, please try again later");
+//        try {
+//            if (nodeRole != RaftRole.LEADER && StrUtil.isNotBlank(raftLeaderId)) { // 当前集群存在leader节点但是当前节点不是leader
+//                result.setStatus(Boolean.FALSE); // 命令写入失败
+//                result.setRedirect(Boolean.TRUE);
+//                result.setReason("current node not leader");
+//            } else if (nodeRole != RaftRole.LEADER && StrUtil.isBlank(raftLeaderId)) { // 当前集群不存在leader节点
+//                result.setStatus(Boolean.FALSE);
+//                result.setReason("there is currently no leader, please try again later");
+//            } else {
+//                // 写入相关数据到raft集群并返回该日志条目的索引
+//                // 如果被提交到大部分的节点则committedIndex会大于当前的appendedIndex
+//                long appendedIndex = logManager.appendLog(clientRequestMsg.getMsg());
+//                // 等待指定的时间判断提交的日志索引是否超过当前写入的索引位置
+//                long endTime = System.currentTimeMillis() + raftOptions.getWriteTimeout();
+//                while (System.currentTimeMillis() < endTime) {
+//                    try {
+//                        long duration = endTime - System.currentTimeMillis();
+//                        if (duration <= 0) { // 到达指定的时间后退出
+//                            break;
+//                        }
+//                        // 判断达到指定的索引位置
+//                        if (reloadRaftMeta().getCommittedIndex() >= appendedIndex) {
+//                            result.setStatus(Boolean.TRUE);
+//                            result.setReason("append log success");
+//                            return result;
+//                        }
+//                    } catch (Exception e) {
+//                        // Ignore exception
+//                    }
+//                }
+//                // 判断达到指定的索引位置
+//                if (reloadRaftMeta().getCommittedIndex() >= appendedIndex) {
+//                    result.setStatus(Boolean.TRUE);
+//                    result.setReason("append log success");
+//                }
+//            }
+//        } catch (Exception e) {
+//            logger.info("append log failed");
+//        }
+//        return result;
+        return null;
     }
 
     /**
@@ -935,6 +979,33 @@ public class RaftNode implements MessageHandler {
         } catch (Exception e) {
             logger.info("refresh leader ");
         }
+    }
+
+    /**
+     * 接收到客户端的提交的任务
+     * @param task
+     * @param rpcClient
+     */
+    @Override
+    public void onSubmitTask(Task task, RpcClient rpcClient) {
+        // 首先将任务提交到池中等待写入到raft节点同步
+        // 如果任务被成功的指定可以进行回调
+        taskExecutor.submit(() -> { // raft主线程执行的时候会开始向其他的节点同步任务
+            try {
+                if (nodeRole != RaftRole.LEADER && StrUtil.isNotBlank(raftLeaderId)) { // 当前集群存在leader节点但是当前节点不是leader
+                    rpcClient.sendMessage(Status.redirect());
+                } else if (nodeRole != RaftRole.LEADER && StrUtil.isBlank(raftLeaderId)) { // 当前集群不存在leader节点
+                    rpcClient.sendMessage(Status.failed("there is currently no leader, please try again later"));
+                } else {
+                    // 写入相关数据到raft集群并返回该日志条目的索引
+                    // 如果被提交到大部分的节点则committedIndex会大于当前的appendedIndex
+                    taskPool.putIfAbsent(TaskHolder.holder(task.getUuid()), rpcClient);
+                    logManager.appendLog(task);
+                }
+            } catch (Exception e) {
+                logger.info("task submit failed", e);
+            }
+        });
     }
 
 }

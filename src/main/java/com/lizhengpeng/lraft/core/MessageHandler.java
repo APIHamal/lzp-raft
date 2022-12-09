@@ -65,4 +65,10 @@ public interface MessageHandler {
      */
     void onRefreshLeader(RefreshLeaderMsg refreshLeaderMsg, RpcClient rpcClient);
 
+    /**
+     * 客户端获取leader节点
+     * @param rpcClient
+     */
+    void onSubmitTask(Task task, RpcClient rpcClient);
+
 }
