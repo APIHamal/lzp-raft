@@ -873,7 +873,8 @@ public class RaftNode implements MessageHandler {
                         // 判断达到指定的索引位置
                         if (reloadRaftMeta().getCommittedIndex() >= appendedIndex) {
                             result.setStatus(Boolean.TRUE);
-                            break;
+                            result.setReason("append log success");
+                            return result;
                         }
                     } catch (Exception e) {
                         // Ignore exception
@@ -882,6 +883,7 @@ public class RaftNode implements MessageHandler {
                 // 判断达到指定的索引位置
                 if (reloadRaftMeta().getCommittedIndex() >= appendedIndex) {
                     result.setStatus(Boolean.TRUE);
+                    result.setReason("append log success");
                 }
             }
         } catch (Exception e) {

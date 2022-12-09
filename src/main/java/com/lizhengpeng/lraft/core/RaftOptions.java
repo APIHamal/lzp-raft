@@ -17,7 +17,7 @@ public class RaftOptions {
 
     private int maxElectionTimeout = 2000; // 最大选举超时时间
 
-    private int heartbeatInterval = 150; // 心跳时间间隔
+    private int heartbeatInterval = 80; // 心跳时间间隔
 
     private int snapshotInterval = 60; // 心跳时间间隔(秒)
 

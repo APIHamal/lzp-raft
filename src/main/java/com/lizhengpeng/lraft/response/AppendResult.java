@@ -17,8 +17,9 @@ public class AppendResult {
 
     @Override
     public String toString() {
-        return "ClientRequestRes{" +
-                "reason='" + reason + '\'' +
+        return "AppendResult{" +
+                "status=" + status +
+                ", reason='" + reason + '\'' +
                 '}';
     }
 }
