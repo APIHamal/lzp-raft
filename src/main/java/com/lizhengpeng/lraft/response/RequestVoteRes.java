@@ -7,7 +7,7 @@ import lombok.Setter;
 @Getter
 public class RequestVoteRes {
 
-    private Long term;
+    private long term;
 
     private Boolean success;
 

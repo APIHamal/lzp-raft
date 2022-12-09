@@ -345,16 +345,8 @@ public class FileLogManager implements LogManager {
             // todo 这里在加入了快照之后要加上快照的处理
             if (preLogTerm == 0 && preLogIndex == 0) {
                 // 整个集群的第一条日志数据应该直接添加
-                // 但是如果当前已经存在提交的日志则是出现了异常
-                if (reloadRaftMeta().getCommittedIndex() > 0) {
-                    logger.warn("replicate log conflict exception log index => {} committed index", raftLog.getIndex(), raftMeta.getCommittedIndex());
-                    throw new RaftException("receive raft first log but current some part log committed");
-                } else {
-                    // 清空整个日志列表然后添加
-                    // 注意：写入的term与index只能与leader发送出来的相同
-                    cleanSuffix(0l);
-                    appendLog(raftLog.getTerm(), raftLog.getEntries());
-                }
+                cleanSuffix(0l);
+                appendLog(raftLog.getTerm(), raftLog.getEntries());
             } else {
                 // 判断日志是否匹配如果不匹配则需要进行回退
                 LogEntry logEntry = getLogEntry(preLogIndex);

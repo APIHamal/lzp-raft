@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * raft集群成员信息
@@ -61,12 +60,27 @@ public class RaftGroupTable {
      */
     public List<Endpoint> getBroadcastList(NodeId nodeId) {
         List<Endpoint> endpoints = new ArrayList<>();
-        groupTable.entrySet().forEach(entry -> {
-            if (!Objects.equals(nodeId, entry.getKey())) {
-                endpoints.add(entry.getValue());
+        groupTable.forEach((k, v) -> {
+            if (!Objects.equals(nodeId, k)) {
+                endpoints.add(v);
             }
         });
         return endpoints;
+    }
+
+    /**
+     * 获取成员中指定节点外的其他节点
+     * @param nodeId
+     * @return
+     */
+    public List<ReplicateProgress> getReplicateProgress(NodeId nodeId) {
+        List<ReplicateProgress> progresses = new ArrayList<>();
+        replicateProgress.forEach((k, v) -> {
+            if (!Objects.equals(nodeId, k)) {
+                progresses.add(v);
+            }
+        });
+        return progresses;
     }
 
     /**
@@ -110,6 +124,7 @@ public class RaftGroupTable {
             ReplicateProgress progress = replicateProgress.computeIfAbsent(k, f -> new ReplicateProgress());
             progress.setMatchIndex(nextLogIndex);
             progress.setNextIndex(nextLogIndex);
+            progress.setLastLog(-1); // 对端实际复制的索引的位置
         });
     }
 
@@ -145,11 +160,7 @@ public class RaftGroupTable {
      * @return
      */
     public boolean replicateGreatHalf(long replicateIndex) {
-        List<ReplicateProgress> progressList = replicateProgress.values()
-                .stream()
-                .filter(item -> item.getMatchIndex() >= replicateIndex)
-                .collect(Collectors.toList());
-        return progressList.size() + 1 >= getHalfCount(); // +1是因为包含当前的leader节点raftGroupTable中更新复制进度是除了当前leader节点
+        return replicateIndex + 1 >= getHalfCount();
     }
 
 }

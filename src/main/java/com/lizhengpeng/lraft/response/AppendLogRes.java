@@ -13,7 +13,7 @@ public class AppendLogRes {
 
     private String nodeId;
 
-    private long nextLogIndex;
+    private long logIndex;
 
     @Override
     public String toString() {
