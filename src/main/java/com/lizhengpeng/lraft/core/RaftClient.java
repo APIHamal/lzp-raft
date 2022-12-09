@@ -1,11 +1,9 @@
 package com.lizhengpeng.lraft.core;
 
 import cn.hutool.core.collection.CollUtil;
-import com.lizhengpeng.lraft.exception.RaftException;
 import com.lizhengpeng.lraft.request.ClientRequestMsg;
 import com.lizhengpeng.lraft.request.RefreshLeaderMsg;
 import com.lizhengpeng.lraft.response.AppendResult;
-import com.lizhengpeng.lraft.response.RedirectRes;
 import com.lizhengpeng.lraft.response.RefreshLeaderRes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,15 +53,25 @@ public class RaftClient {
      * @return
      */
     public synchronized AppendResult sendRequestSync(ClientRequestMsg requestMsg) {
-        if (leaderEndpoint == null) { // raft集群中的leader服务器的地址未知
-            refreshRaftLeader(); // 重新获取一次leader的地址
-            if (leaderEndpoint == null) {
-                // 如果仍然没有获取到数据说明当前raft集群没有leader
-                // 避免时间浪费直接返回错误
-                throw new RaftException("leader endpoint un know");
+        AppendResult result = new AppendResult();
+        result.setStatus(Boolean.FALSE);
+        result.setReason("send msg failed");
+        try {
+            if (leaderEndpoint == null) { // raft集群中的leader服务器的地址未知
+                refreshRaftLeader(); // 重新获取一次leader的地址
+                if (leaderEndpoint == null) {
+                    // 如果仍然没有获取到数据说明当前raft集群没有leader
+                    // 避免时间浪费直接返回错误
+                    result.setStatus(Boolean.FALSE);
+                    result.setReason("there is currently no leader, please try again later");
+                    return result;
+                }
             }
+            return autoRedirectSendRequest(leaderEndpoint, requestMsg, 0);
+        } catch (Exception e) {
+            logger.debug("send msg failed", e);
         }
-        return autoRedirectSendRequest(leaderEndpoint, requestMsg, 0);
+        return result;
     }
 
     /**
@@ -76,30 +84,33 @@ public class RaftClient {
     private synchronized AppendResult autoRedirectSendRequest(Endpoint endpoint, ClientRequestMsg clientRequestMsg, int redirectCount) {
         if (redirectCount > MAX_REDIRECT_COUNT) { // 重定向达到阈值则直接报错处理
             leaderEndpoint = null; // 多次重定向发生了错误则清楚leader的地址
-            throw new RaftException("send msg failed");
+            AppendResult result = new AppendResult();
+            result.setStatus(Boolean.FALSE);
+            result.setReason("send msg failed, maximum number of retries redirect");
+            return result;
         }
         Object response = sendMessageSync(endpoint, clientRequestMsg);
-        if (redirectCount == 0 && response == null) { // 首次发送失败可能是raft发生了leadership
-            refreshRaftLeader();      // 或者leader发生了宕机
-            if (leaderEndpoint == null) {
-                throw new RaftException("leader endpoint un know");
-            }
-            return autoRedirectSendRequest(leaderEndpoint, clientRequestMsg, ++redirectCount);
-        } else if (response instanceof RedirectRes) {
-            RedirectRes res = (RedirectRes) response;
-            logger.info("receive redirect response => {}", res);
-            if (res.getRedirect() == Boolean.TRUE) {
-                leaderEndpoint = res.getEndpoint();
+        if (response != null && (response instanceof AppendResult)) { // 首次发送失败可能是raft发生了leadership
+            AppendResult appendResult = (AppendResult) response;
+            if (appendResult.getStatus() == Boolean.TRUE) { // 命令写入raft成功直接返回即可
+                return appendResult;
+            } else if (appendResult.getRedirect() == Boolean.TRUE) { // 表示发生了leadership需要重新获取leader的地址
+                refreshRaftLeader();
+                if (leaderEndpoint == null) { // 或者leader发生了宕机
+                    appendResult.setStatus(Boolean.FALSE);
+                    appendResult.setReason("there is currently no leader, please try again later");
+                    return appendResult;
+                }
                 return autoRedirectSendRequest(leaderEndpoint, clientRequestMsg, ++redirectCount);
-            } else {
-                leaderEndpoint = null;
-                throw new RaftException("leader endpoint un know");
+            } else { // 失败了直接返回原因
+                return appendResult;
             }
-        } else if (response instanceof AppendResult) {
-            return (AppendResult) response;
         } else {
             leaderEndpoint = null;
-            throw new RaftException("send msg failed");
+            AppendResult result = new AppendResult();
+            result.setStatus(Boolean.FALSE);
+            result.setReason("send msg failed, please try again later");
+            return result;
         }
     }
 

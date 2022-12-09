@@ -15,6 +15,8 @@ public class AppendResult {
 
     private String reason;
 
+    private Boolean redirect;
+
     @Override
     public String toString() {
         return "AppendResult{" +

@@ -839,7 +839,7 @@ public class RaftNode implements MessageHandler {
      */
     @Override
     public void onLeaderAppendLog(ClientRequestMsg clientRequestMsg, RpcClient rpcClient) {
-        rpcClient.sendMessage(this.appendLogToLeader(clientRequestMsg));
+        rpcClient.sendMessage(appendLog(clientRequestMsg));
     }
 
     /**
@@ -847,16 +847,21 @@ public class RaftNode implements MessageHandler {
      * @param clientRequestMsg
      * @return
      */
-    public AppendResult appendLogToLeader(ClientRequestMsg clientRequestMsg) {
+    public AppendResult appendLog(ClientRequestMsg clientRequestMsg) {
         AppendResult result = new AppendResult();
         result.setStatus(Boolean.FALSE);
-        result.setReason("append log failed");
+        result.setReason("append log failed, please try again later");
         try {
             // 客户端写入数据的时候需要获取锁当日志被复制到
             // 大多数的节点时返回成功的数据
             appendLogLock.lock();
-            if (nodeRole != RaftRole.LEADER) {
+            if (nodeRole != RaftRole.LEADER && StrUtil.isNotBlank(raftLeaderId)) { // 当前集群存在leader节点但是当前节点不是leader
+                result.setStatus(Boolean.FALSE); // 命令写入失败
+                result.setRedirect(Boolean.TRUE);
                 result.setReason("current node not leader");
+            } else if (nodeRole != RaftRole.LEADER && StrUtil.isBlank(raftLeaderId)) { // 当前集群不存在leader节点
+                result.setStatus(Boolean.FALSE);
+                result.setReason("there is currently no leader, please try again later");
             } else {
                 // 写入相关数据到raft集群并返回该日志条目的索引
                 // 如果被提交到大部分的节点则committedIndex会大于当前的appendedIndex
@@ -902,28 +907,34 @@ public class RaftNode implements MessageHandler {
     @Override
     public void onRefreshLeader(RefreshLeaderMsg refreshLeaderMsg, RpcClient rpcClient) {
         RefreshLeaderRes refreshResponse = new RefreshLeaderRes();
-        String leaderId = raftLeaderId;
-        if (nodeRole == RaftRole.LEADER) {
-            leaderId = currentId;
-        }
-        // 当前raft集群可能并不存在leader节点
-        // 可能集群刚启动或者发生了leadership
-        if (StrUtil.isBlank(leaderId)) {
-            refreshResponse.setRefreshed(Boolean.FALSE);
-            refreshResponse.setErrorMsg("there is currently no leader");
-        } else {
-            Endpoint endpoint = raftGroupTable.getEndpoint(NodeId.of(leaderId));
-            if (endpoint == null) {
-                logger.warn("refresh leader => {} endpoint not found", NodeId.of(leaderId));
-                refreshResponse.setRefreshed(Boolean.FALSE);
-                refreshResponse.setErrorMsg("leader endpoint not found");
-            } else {
-                refreshResponse.setRefreshed(Boolean.TRUE);
-                refreshResponse.setErrorMsg("refresh leader success");
-                refreshResponse.setEndpoint(endpoint);
+        refreshResponse.setRefreshed(Boolean.FALSE);
+        refreshResponse.setErrorMsg("refresh leader failed");
+        try {
+            String leaderId = raftLeaderId;
+            if (nodeRole == RaftRole.LEADER) {
+                leaderId = currentId;
             }
+            // 当前raft集群可能并不存在leader节点
+            // 可能集群刚启动或者发生了leadership
+            if (StrUtil.isBlank(leaderId)) {
+                refreshResponse.setRefreshed(Boolean.FALSE);
+                refreshResponse.setErrorMsg("there is currently no leader");
+            } else {
+                Endpoint endpoint = raftGroupTable.getEndpoint(NodeId.of(leaderId));
+                if (endpoint == null) {
+                    logger.warn("refresh leader => {} endpoint not found", NodeId.of(leaderId));
+                    refreshResponse.setRefreshed(Boolean.FALSE);
+                    refreshResponse.setErrorMsg("leader endpoint not found");
+                } else {
+                    refreshResponse.setRefreshed(Boolean.TRUE);
+                    refreshResponse.setErrorMsg("refresh leader success");
+                    refreshResponse.setEndpoint(endpoint);
+                }
+            }
+            rpcClient.sendMessage(refreshResponse); // 刷新leader节点获取raft主节点的信息
+        } catch (Exception e) {
+            logger.info("refresh leader ");
         }
-        rpcClient.sendMessage(refreshResponse); // 刷新leader节点获取raft主节点的信息
     }
 
 }
