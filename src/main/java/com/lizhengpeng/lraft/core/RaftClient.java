@@ -25,17 +25,33 @@ public class RaftClient {
 
     private static final Logger logger = LoggerFactory.getLogger(RaftClient.class);
 
-    private static final int MAX_REDIRECT_COUNT = 5; // 自动重定向的最大次数
+    private int MAX_REDIRECT_COUNT = 5; // 自动重定向的最大次数
 
-    private static final int CONNECT_TIME_OUT = 3000; // 连接超时时间
+    private int CONNECT_TIME_OUT = 300; // 连接超时时间
 
-    private static final int READ_TIME_OUT = 5000; // 读超时时间
+    private int READ_TIME_OUT = 5000; // 读超时时间
 
     private List<Endpoint> endpoints = new ArrayList<>();
 
     private ConcurrentHashMap<Endpoint, RpcClientHolder> rpcClientHolder = new ConcurrentHashMap<>();
 
     private volatile Endpoint leaderEndpoint;
+
+    /**
+     * 设置客户端的连接超时时间
+     * @param connectTimeout
+     */
+    public void setConnectTimeout(int connectTimeout) {
+        this.CONNECT_TIME_OUT = connectTimeout;
+    }
+
+    /**
+     * 设置读取响应的超时时间
+     * @param readTimeout
+     */
+    public void setReadTimeout(int readTimeout) {
+        this.READ_TIME_OUT = readTimeout;
+    }
 
     /**
      * 初始化集群的节点配置

@@ -24,6 +24,7 @@ public class RpcClientTest {
                 msg.setMsg("kv-cmd-" + System.currentTimeMillis());
                 System.out.println(raftClient.sendRequestSync(msg));
             } catch (Exception e) {
+                e.printStackTrace();
             }
             Thread.sleep(5);
         }
