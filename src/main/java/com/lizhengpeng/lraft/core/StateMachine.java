@@ -13,4 +13,10 @@ public interface StateMachine {
      */
     void apply(Task task, Long logIndex);
 
+    /**
+     * 状态机写入当前的快照数据
+     * @return
+     */
+    String writeSnapshot();
+
 }

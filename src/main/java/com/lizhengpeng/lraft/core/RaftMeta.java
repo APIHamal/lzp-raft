@@ -23,6 +23,10 @@ public class RaftMeta {
 
     private long firstLogIndex; // 加入了日志快照后需要裁剪日志数据
 
+    private long snapshotLastLogIndex; // 快照中最后一条日志条目的索引
+
+    private long snapshotLastLogTerm; // 快照中最后一条日志条目的任期
+
     @Override
     public String toString() {
         return "RaftMeta{" +

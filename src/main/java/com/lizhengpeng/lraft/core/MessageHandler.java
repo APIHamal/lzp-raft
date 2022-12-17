@@ -52,13 +52,6 @@ public interface MessageHandler {
     void onRequestVoteCallback(RequestVoteRes requestVoteMsg);
 
     /**
-     * leader节点接收到日志时出发
-     * @param appendLogEntry
-     * @param rpcClient
-     */
-    void onLeaderAppendLog(ClientRequestMsg appendLogEntry, RpcClient rpcClient);
-
-    /**
      * 客户端获取leader节点
      * @param refreshLeaderMsg
      * @param rpcClient

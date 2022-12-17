@@ -22,12 +22,12 @@ public class TaskExecutor {
         return taskExecutor.submit(callable);
     }
 
-    public ScheduledFuture<?> submit(Runnable runnable, int timeOut) {
-        return taskExecutor.schedule(runnable, timeOut, TimeUnit.MILLISECONDS);
+    public ScheduledFuture<?> submit(Runnable runnable, int timeout) {
+        return taskExecutor.schedule(runnable, timeout, TimeUnit.MILLISECONDS);
     }
 
-    public ScheduledFuture<?> replicateTask(Runnable runnable, int timeOut) { // 重复的任务
-        return replicateExecutor.scheduleWithFixedDelay(runnable, timeOut, timeOut, TimeUnit.SECONDS);
+    public ScheduledFuture<?> fixedDelayTask(Runnable runnable, int timeout) { // 重复的任务
+        return replicateExecutor.scheduleWithFixedDelay(runnable, timeout, timeout, TimeUnit.MILLISECONDS);
     }
 
     public void async(Runnable runnable) {

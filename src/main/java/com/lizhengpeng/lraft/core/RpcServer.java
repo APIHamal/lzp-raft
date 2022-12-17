@@ -130,10 +130,6 @@ public class RpcServer {
                     // 接收到了日志同步的消息
                     AppendLogRes res = (AppendLogRes) resMessage;
                     messageHandler.onAppendLogCallback(res);
-                } else if (resMessage instanceof ClientRequestMsg) {
-                    // leader收到了来自客户端的业务操作请求
-                    ClientRequestMsg clientRequestMsg = (ClientRequestMsg) resMessage;
-                    messageHandler.onLeaderAppendLog(clientRequestMsg, rpcClient);
                 } else if (resMessage instanceof RefreshLeaderMsg) {
                     // 客户端尝试获取leader节点
                     RefreshLeaderMsg refreshLeaderMsg = (RefreshLeaderMsg) resMessage;

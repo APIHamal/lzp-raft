@@ -1,6 +1,7 @@
 package com.lizhengpeng.lraft.sample.kv;
 
 import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSONObject;
 import com.lizhengpeng.lraft.core.RpcClient;
 import com.lizhengpeng.lraft.core.StateMachine;
 import com.lizhengpeng.lraft.core.Status;
@@ -46,5 +47,14 @@ public class KvStoreStateMachine implements StateMachine {
         } else {
             rpcClient.sendMessage("un support command!!!");
         }
+    }
+
+    /**
+     * 写出快照数据
+     * @return
+     */
+    @Override
+    public String writeSnapshot() {
+        return JSONObject.toJSONString(kvStore); // 将当前的内容转为字符串写出
     }
 }

@@ -31,6 +31,8 @@ public class RaftOptions {
 
     private int cleanTaskInterval = 100; // 清理任务的执行时间
 
+    private int snapshotTaskInterval = 1000; // 创建快照的时间间隔
+
     @Override
     public String toString() {
         return "RaftOptions{" +
