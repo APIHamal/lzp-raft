@@ -2,6 +2,7 @@ package com.lizhengpeng.lraft.sample.kv;
 
 import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.TypeReference;
 import com.lizhengpeng.lraft.core.RpcClient;
 import com.lizhengpeng.lraft.core.StateMachine;
 import com.lizhengpeng.lraft.core.Status;
@@ -9,6 +10,7 @@ import com.lizhengpeng.lraft.core.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -55,6 +57,14 @@ public class KvStoreStateMachine implements StateMachine {
      */
     @Override
     public String writeSnapshot() {
+        logger.info("KvStore =========> 快照生成");
         return JSONObject.toJSONString(kvStore); // 将当前的内容转为字符串写出
+    }
+
+    @Override
+    public void applySnapshot(String snapshotData) {
+        logger.info("KvStore =========> 快照加载");
+        Map<String, String> snapshotKv = JSONObject.parseObject(snapshotData, new TypeReference<Map<String, String>>(){});
+        kvStore.putAll(snapshotKv);
     }
 }

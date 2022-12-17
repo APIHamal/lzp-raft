@@ -2,6 +2,7 @@ package com.lizhengpeng.lraft.core;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.StrUtil;
 import com.lizhengpeng.lraft.exception.RaftCodecException;
@@ -18,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -89,7 +91,9 @@ public class RaftNode implements MessageHandler {
         this.snapshot = new Snapshot(raftOptions.getLogDir());
         this.stateMachine = stateMachine;
         this.raftMeta = this.reloadRaftMeta();
+        this.lastApplied = raftMeta.getSnapshotLastLogIndex(); // 如果加入了日志快照则lastApplied在启动时应该对应快照最后一条日志的索引
         rpcServer = new RpcServer(raftOptions);
+        applySnapshot(); // 状态机应用快照数据
         applyStateMachine(reloadRaftMeta().getCommittedIndex()); // 应用当前的日志到状态机中
     }
 
@@ -644,6 +648,26 @@ public class RaftNode implements MessageHandler {
     }
 
     /**
+     * 状态机加载快照数据
+     * 快照文件存在时并直接运用到状态机中
+     */
+    public synchronized void applySnapshot() {
+        try {
+            // 快照文件最后会被重命名为raft.snapshot
+            File snapshotFile = new File(raftOptions.getLogDir() + File.separator + "snapshot" + File.separator + "raft.snapshot");
+            if (!snapshotFile.exists() || !snapshotFile.isFile()) {
+                logger.warn("snapshot file not found, skip apply snapshot");
+                return;
+            }
+            // 读取快照内容应用到状态机中
+            byte[] snapshotBuffer = IoUtil.readBytes(new FileInputStream(snapshotFile));
+            stateMachine.applySnapshot(new String(snapshotBuffer, StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new RaftException("apply snapshot exception", e);
+        }
+    }
+
+    /**
      * 应用客户端的命令到状态机
      * @param committedIndex
      */
@@ -964,9 +988,9 @@ public class RaftNode implements MessageHandler {
     public void registerSnapshotTask() {
         snapshotTask = taskExecutor.fixedDelayTask(() -> {
             try {
-                // firstLogIndex与lastLogIndex不相等时就可以生成快照数据
-                // 如果状态机当前未提交任何指令则不进行快照生成
-                if (reloadRaftMeta().getFirstLogIndex() == reloadRaftMeta().getLastLogIndex() || lastApplied <= reloadRaftMeta().getFirstLogIndex()) {
+                // lastLogIndex小于firstLogIndex表示当前没有任何的日志数据
+                // lastApplied小于firstLogIndex表示当前没有应用任何的日志数据
+                if (reloadRaftMeta().getLastLogIndex() < reloadRaftMeta().getFirstLogIndex() || lastApplied < reloadRaftMeta().getFirstLogIndex()) {
                     logger.info("first log index equals last log index, skip snapshot task");
                     return;
                 }
@@ -978,44 +1002,43 @@ public class RaftNode implements MessageHandler {
                 }
                 // 创建本地的临时快照文件
                 // raft也可以接收来自leader节点的快照安装请求
-                File tempSnapshotFile = new File(snapshotDir, "snapshot.local" + reloadRaftMeta().getLastLogIndex() +".tmp");
-                FileUtil.del(tempSnapshotFile); // 快照临时文件可能之前生成失败已经存在则先删除再创建
+                File tempSnapshotFile = new File(snapshotDir, "raft.local." + reloadRaftMeta().getLastLogIndex() +".snapshot");
+                FileUtil.del(tempSnapshotFile); // 快照临时文件如果存在则进行删除(之前可能存在这个时候需要进行删除)
                 if (!tempSnapshotFile.createNewFile()) {
                     logger.info("create snapshot file => {} failed", tempSnapshotFile.getCanonicalPath());
                     throw new RaftException("create snapshot file failed");
                 }
                 // 创建文件流准备写入数据
-                try (RandomAccessFile accessFile = AccessUtils.openRandomAccess(tempSnapshotFile)) {
-                    long currentApplied = lastApplied; // 当前状态机应用的位置
-                    // 状态机写入当前的指令数据
-                    String snapshot = stateMachine.writeSnapshot();
-                    // 得到最后一条日志的term和index
-                    long lastLogTerm = logManager.getLogEntry(currentApplied).getTerm();
-                    long lastLogIndex = logManager.getLogEntry(currentApplied).getIndex();
-                    // 将状态机写入到临时文件中
-                    accessFile.write(snapshot.getBytes(StandardCharsets.UTF_8));
-                    // 更新快照文件的数据
-                    // 其实这里应该要保持原子性的更新操作
-                    // 真实生成环境应该借助rocksDb之类的本地kv存储保持更新的原子性
-                    // 更新临时文件的文件名为新的快照文件
-                    FileUtil.rename(tempSnapshotFile, "raft.snapshot", true);
-                    // 快照文件生成成功后更新当前的元数据信息
-                    reloadRaftMeta();
-                    raftMeta.setSnapshotLastLogTerm(lastLogTerm);
-                    raftMeta.setSnapshotLastLogIndex(lastLogIndex);
-                    // firstLogIndex为当前snapshotLastLogIndex+1
-                    // 添加了snapshot后在同步日志时需要额外的判断
-                    raftMeta.setFirstLogIndex(raftMeta.getSnapshotLastLogIndex() + 1);
-                    updateRaftMeta(raftMeta);
-                    // 删除旧的历史日志记录
-                    logManager.cleanPrefix(currentApplied); // 删除本次快照生成涉及的快照索引
-                } catch (Exception e) {
-                    throw new RaftException("write snapshot exception", e);
-                }
+                RandomAccessFile accessFile = AccessUtils.openRandomAccess(tempSnapshotFile);
+                long applied = lastApplied; // 当前状态机应用的位置
+                // 状态机写入当前的指令数据
+                String snapshot = stateMachine.writeSnapshot();
+                // 得到最后一条日志的term和index
+                long lastLogTerm = logManager.getLogEntry(applied).getTerm();
+                long lastLogIndex = logManager.getLogEntry(applied).getIndex();
+                // 将状态机写入到临时文件中
+                accessFile.write(snapshot.getBytes(StandardCharsets.UTF_8));
+                accessFile.close();
+                // 更新快照文件的数据
+                // 其实这里应该要保持原子性的更新操作
+                // 真实生成环境应该借助rocksDb之类的本地kv存储保持更新的原子性
+                // 更新临时文件的文件名为新的快照文件
+                FileUtil.rename(tempSnapshotFile, "raft.snapshot", true);
+                // 快照文件生成成功后更新当前的元数据信息
+                reloadRaftMeta();
+                raftMeta.setSnapshotLastLogTerm(lastLogTerm);
+                raftMeta.setSnapshotLastLogIndex(lastLogIndex);
+                // firstLogIndex为当前snapshotLastLogIndex+1
+                // 添加了snapshot后在同步日志时需要额外的判断
+                // 本地生成的快照文件applied永远小于等于lastLogIndex
+                raftMeta.setFirstLogIndex(lastLogIndex + 1);
+                updateRaftMeta(raftMeta);
+                // 删除旧的历史日志记录
+                logManager.cleanPrefix(applied); // 删除本次快照生成涉及的快照索引
             } catch (Exception e) {
                 logger.info("generate snapshot file exception", e);
             }
-        }, raftOptions.getSnapshotInterval());
+        }, raftOptions.getSnapshotTaskInterval());
     }
 
 }

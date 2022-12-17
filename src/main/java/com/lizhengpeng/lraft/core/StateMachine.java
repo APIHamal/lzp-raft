@@ -19,4 +19,10 @@ public interface StateMachine {
      */
     String writeSnapshot();
 
+    /**
+     * 应用快照数据到状态机中
+     * @param snapshotData
+     */
+    void applySnapshot(String snapshotData);
+
 }
