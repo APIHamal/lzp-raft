@@ -17,8 +17,6 @@ public class ReplicateProgress {
 
     private long snapshotOffset;
 
-    private long lastReadLength; // 记录上一次读取的snapshot长度
-
     private long lastLog; // 记录上一次发送的日志
 
     public void decrMatchIndex() { // 第一条日志数据

@@ -17,4 +17,15 @@ public class InstallSnapshotRes {
 
     private Boolean success; // 是否安装成功
 
+    private Boolean finished; // 整个快照复制完成
+
+    @Override
+    public String toString() {
+        return "InstallSnapshotRes{" +
+                "term=" + term +
+                ", nodeId='" + nodeId + '\'' +
+                ", success=" + success +
+                ", finished=" + finished +
+                '}';
+    }
 }

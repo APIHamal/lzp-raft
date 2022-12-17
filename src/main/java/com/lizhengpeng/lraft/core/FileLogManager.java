@@ -283,19 +283,13 @@ public class FileLogManager implements LogManager {
     public synchronized boolean cleanPrefix(long logIndex) {
         try {
             // 如果不存在任何的日志
-            if (logTreeMap.isEmpty() || logIndex < reloadRaftMeta().getFirstLogIndex()) {
+            if (logTreeMap.isEmpty()) {
                 logger.warn("currently does not clean any logs");
                 return false;
             }
             if (logIndex >= reloadRaftMeta().getLastLogIndex()) {
                 logTreeMap.values().forEach(item -> item.destroy());
                 logTreeMap.clear(); // 清空列表
-                // todo 这里要判断是否存在快照如果快照不存在则firstLogIndex始终都是1则lastLogIndex为0
-                // 重新设置下一条写入的日志的索引
-                // firstLogIndex为即将写入的第一条索引的Id
-                // 这里firstLogIndex应该为快照中的lastLogIndex+1
-                raftMeta.setFirstLogIndex(1);
-                raftMeta.setLastLogIndex(0);
             } else {
                 // 从旧的历史日志开始遍历
                 while (CollUtil.isNotEmpty(logTreeMap)) {
@@ -314,10 +308,7 @@ public class FileLogManager implements LogManager {
                         continue; // 前缀删除可能会导致新的文件生成则全局的firstLogIndex更新
                     }
                 }
-                // 可能删除了所有的日志
-                raftMeta.setFirstLogIndex(logTreeMap.firstEntry().getValue().getFirstIndex()); // 为当前最新的日志记录的索引
             }
-            updateRaftMeta(raftMeta);
             return true;
         } catch (Exception e) {
             logger.info("log manager clean prefix exception", e);
@@ -378,6 +369,14 @@ public class FileLogManager implements LogManager {
      */
     @Override
     public synchronized LogEntry getLogEntry(long index) {
+        // 快照存在时可能查询的时快照数据
+        if (index != 0 && index == reloadRaftMeta().getSnapshotLastLogIndex()) {
+            return LogEntry.builder()
+                    .kind(0)
+                    .index(index)
+                    .term(reloadRaftMeta().getSnapshotLastLogTerm())
+                    .build();
+        }
         if (logTreeMap.isEmpty()) {
             return null;
         }

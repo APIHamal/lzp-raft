@@ -19,7 +19,7 @@ public class InstallSnapshotMsg {
 
     private Long lastLogTerm;
 
-    private String data;
+    private byte[] data;
 
     private Long offset;
 
@@ -32,7 +32,6 @@ public class InstallSnapshotMsg {
                 ", nodeId='" + nodeId + '\'' +
                 ", lastLogIndex=" + lastLogIndex +
                 ", lastLogTerm=" + lastLogTerm +
-                ", data='" + data + '\'' +
                 ", offset=" + offset +
                 ", lastPart=" + lastPart +
                 '}';
